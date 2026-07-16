@@ -117,6 +117,42 @@ void test_build_rejects_unknown_dpt(void) {
 	TEST_ASSERT_EQUAL_UINT8(0, KnxFrame::build(SRC, 0x0001, bad, frame, sizeof(frame)));
 }
 
+//---- parse verified independently of build(): hand-authored raw frames from the spec ----
+// Frame skeleton (1.1.5 -> 0/1/1, inline-6): BC 11 05 01 01 E1 00 <apci> <checksum>.
+// The APCI low byte selects the service: Write 0x80|d, Response 0x40|d, Read 0x00.
+
+void test_parse_raw_groupvalue_write(void) {
+	uint8_t raw[] = { 0xBC, 0x11, 0x05, 0x01, 0x01, 0xE1, 0x00, 0x81, 0x37 };
+	ParsedTelegram tg;
+	TEST_ASSERT_TRUE(KnxFrame::parse(raw, sizeof(raw), tg));
+	TEST_ASSERT_EQUAL(GroupValueType::Write, tg.type);
+	TEST_ASSERT_EQUAL_UINT8(1, tg.source.area);
+	TEST_ASSERT_EQUAL_UINT8(1, tg.source.line);
+	TEST_ASSERT_EQUAL_UINT8(5, tg.source.device);
+	TEST_ASSERT_TRUE(gaEqual(GroupAddress{ 0, 1, 1 }, tg.target));
+	TEST_ASSERT_TRUE(tg._isInline6);
+	TEST_ASSERT_EQUAL_UINT8(1, tg.inline6Data);
+	TEST_ASSERT_TRUE(KnxCodec::decode(KNX_DPT::DPT1, &tg.inline6Data, 1).asBool());
+}
+
+void test_parse_raw_groupvalue_response(void) {
+	// Same frame but APCI 0x41 = GroupValueResponse + data 1 (never emitted by build()).
+	uint8_t raw[] = { 0xBC, 0x11, 0x05, 0x01, 0x01, 0xE1, 0x00, 0x41, 0xF7 };
+	ParsedTelegram tg;
+	TEST_ASSERT_TRUE(KnxFrame::parse(raw, sizeof(raw), tg));
+	TEST_ASSERT_EQUAL(GroupValueType::Response, tg.type);
+	TEST_ASSERT_EQUAL_UINT8(1, tg.inline6Data);
+}
+
+void test_parse_raw_groupvalue_read(void) {
+	// APCI 0x00 = GroupValueRead, no data.
+	uint8_t raw[] = { 0xBC, 0x11, 0x05, 0x01, 0x01, 0xE1, 0x00, 0x00, 0xB6 };
+	ParsedTelegram tg;
+	TEST_ASSERT_TRUE(KnxFrame::parse(raw, sizeof(raw), tg));
+	TEST_ASSERT_EQUAL(GroupValueType::Read, tg.type);
+	TEST_ASSERT_EQUAL_UINT8(0, tg.inline6Data);
+}
+
 int main(int, char**) {
 	UNITY_BEGIN();
 	RUN_TEST(test_build_dpt1_layout);
@@ -127,5 +163,8 @@ int main(int, char**) {
 	RUN_TEST(test_parse_rejects_bad_checksum);
 	RUN_TEST(test_parse_rejects_short);
 	RUN_TEST(test_build_rejects_unknown_dpt);
+	RUN_TEST(test_parse_raw_groupvalue_write);
+	RUN_TEST(test_parse_raw_groupvalue_response);
+	RUN_TEST(test_parse_raw_groupvalue_read);
 	return UNITY_END();
 }
