@@ -39,6 +39,22 @@ The existing foundation is sound and survives:
 - Doc discipline (JSDoc on public methods), project style overrides
   (camelCase methods, `#define`, `_camelCase` flags).
 
+**What "keep" means: the architecture and principles above — NOT the old names,
+file boundaries, or code style.** Do not preserve thesis-era artifacts out of
+inertia. Rename freely (e.g. `KNX_Defines → KNX_Common`, `KNX_TPUART2 →
+KNX_Driver`), re-split files, drop dead helpers, and restructure aggressively where
+it serves the new design. This is a fresh public library, not a patched thesis;
+backward-compatibility with the old internal API is a non-goal. When in doubt,
+favor the cleaner structure over the familiar one.
+
+- **Drop the `#ifdef _MSC_VER` / `#pragma region` blocks.** They are MSVC-only
+  code-folding hints and add clutter to every file — especially bad in a public
+  library's **headers**, which users read to learn the API in whatever editor they
+  use (Arduino IDE, VS Code, CLion, vim). The new fine-grained file split (§12)
+  makes them unnecessary; use plain `//---- section ----` comments where grouping
+  helps. (This intentionally overrides the personal `style_cpp.md` convention for
+  this project — a public artifact shouldn't carry one editor's folding markers.)
+
 ## 3. The three ways to send (core UX)
 
 All three are front doors onto **one encode path** and **one value currency**
