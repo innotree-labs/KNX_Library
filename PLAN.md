@@ -95,10 +95,18 @@ knx.send("0/2/5", Dpt5(200));      // Dpt5 accepts only uint8_t
   - `light.on()` — intent object constructs `Dpt1(true)` internally
   - the RX side hands a decoded value back out (§6)
 
+**Internal representation (decided): tagged union.** `KnxValue` is
+`{ KNX_DPT dpt; union{ bool; uint8_t; …; float; datetime; rgb } payload; }` — one
+tag + a union sized to the largest v1 payload (DPT19 datetime, 8 bytes → whole
+value ~10–12 bytes). The `Dpt1()`/`Dpt9()`/… constructors just populate it and the
+codec does union↔wire-bytes in one place. Chosen over a raw byte buffer: typed
+named access reads cleanly and avoids the hand-marshalling that produced the
+`DimmIncrement` bug.
+
 **Runtime-variable DPT** (rare; a generic bus tool where the DPT itself is a
-variable): a tagged `KnxValue { KNX_DPT dpt; union payload; }` built through
-checked factory calls, passed to `send()`. Encapsulated + validated inside one
-type — **never a bare `void*`.** Bottom escape hatch; most users never touch it.
+variable): build the same `KnxValue` through checked factory calls and pass it to
+`send()`. Encapsulated + validated inside one type — **never a bare `void*`.**
+Bottom escape hatch; most users never touch it.
 
 ## 5. `KnxObject` base + intent subclasses
 
@@ -134,10 +142,11 @@ without the user restating either.** This fixes the current asymmetry where
 
 Flow:
 
-1. On construction (or first `.onUpdate()`), the object registers a pointer to
-   itself in the coordinator's RX registry — the same bounded, no-heap array that
-   is `bindings[]` today, now holding `KnxObject*` (replaces the `{GA,DPT,cb}`
-   row). Keep the "match all bindings" loop from `handleParsedTelegram`.
+1. On construction (or first `.onUpdate()`), the object links itself into the
+   coordinator's RX registry — an **intrusive linked list** (coordinator holds a
+   head pointer; each object carries a `next` pointer). Replaces the `bindings[]`
+   array; no fixed cap, no `MAX_OBJECTS`, memory scales with declared objects.
+   Keep the "walk all receivers and match" loop from `handleParsedTelegram`.
 2. Incoming telegram → scan registry for objects whose **listen GA** matches.
 3. Decode payload with **the object's** DPT.
 4. Update the object's **cached value**.
@@ -155,19 +164,23 @@ Boundaries / decisions:
 - **Dynamic send is free-function; dynamic receive needs an object** (somewhere to
   hold the callback + cache). The stateless tier has no receive by definition.
   Document this plainly.
-- **Lifetime:** registry holds raw pointers → objects must outlive it (globals /
-  class members — already the pattern, e.g. `rocker1`). Add a **deregister in the
-  destructor** so a scoped object can't dangle. Document "declare KNX objects at
-  global/member scope."
+- **Lifetime:** the list holds raw pointers → objects must outlive it (globals /
+  class members — already the pattern, e.g. `rocker1`). The destructor **unlinks
+  the object from the list** so a scoped object can't dangle. Document "declare KNX
+  objects at global/member scope."
 - **Value cache read-back:** `.value()` returns last-known with no bus traffic;
   it's what makes `.toggle()` and "is it on?" work without external state.
 
 ## 7. Registry change (concrete)
 
-- Today: `KNX_Binding bindings[MAX_BINDINGS]` of `{GA, DPT, callback}`.
-- New: array of `KnxObject*` (bounded, e.g. `MAX_OBJECTS`). The coordinator's
-  incoming-telegram handler iterates, matches on listen GA, and delegates decode
-  + cache + callback to the object.
+- Today: `KNX_Binding bindings[MAX_BINDINGS]` of `{GA, DPT, callback}` — a fixed
+  array.
+- New: **intrusive linked list** of `IKnxReceiver`. The coordinator holds a head
+  pointer; each `KnxObject` carries a `next` pointer, links itself in on
+  construction, and unlinks in its destructor. No fixed cap, no `MAX_OBJECTS` knob —
+  memory scales exactly with the objects the user declares. The incoming-telegram
+  handler walks the list, matches on listen GA, and delegates decode + cache +
+  callback to the object.
 - `KNX::bind(...)` as a free-standing DPT-leaking call is **removed**; its role is
   served by constructing an object (raw is enough:
   `KnxObject o(knx, ga, dpt); o.onUpdate(cb);`).
@@ -187,7 +200,9 @@ Boundaries / decisions:
 
 - **`L_Data.con`:** stop hard-returning `true` from the send path. The ATTiny
   (TP-UART-like) returns a transmit confirmation — parse it and surface real
-  success/failure (and a retry policy). Needed for a product.
+  success/failure to the caller. **No retry logic in the library:** the ATTiny owns
+  bus-level repetition, exactly like a TP-UART; the library only reports the final
+  result.
 - **DPT subsystem:** make encode/decode **symmetric** and the single source of
   truth. Concretely fixes the `DimmIncrement` enum: `Stop` and `Percent_1_5` both
   `0x00` (collision), and the percent→stepcode ordering is inverted
@@ -201,13 +216,20 @@ Boundaries / decisions:
   it would have caught the `DimmIncrement` bug in a 5-line test. Not for
   portability — Arduino is the portability layer.
 
-## 10. Open forks still to decide at implementation time
+## 10. Decisions (were open forks — now settled)
 
-1. **`KnxValue` internals:** tagged struct with a union vs. small-buffer variant —
-   pick the leanest that stays no-heap on AVR.
-2. **Intent class set for v1:** confirm the list (Light, DimmLight, Blind, +?).
-3. **Retry/confirmation policy** on `L_Data.con` failure (count, backoff).
-4. **`MAX_OBJECTS`** sizing.
+1. **`KnxValue` internals → tagged union** (`{ KNX_DPT dpt; union payload; }`).
+   Typed named access, codec does union↔bytes in one place; ~10–12 bytes (DPT19 is
+   the largest v1 payload). See §4.
+2. **Intent class set v1 → actuators + values:**
+   - Actuators: `KnxLight` (DPT1), `KnxDimmLight` (DPT1+DPT3), `KnxBlind` (DPT1).
+   - Values: `KnxTemperature` / `KnxHumidity` (DPT9), `KnxTime` (DPT10),
+     `KnxDate` (DPT11), `KnxDateTime` (DPT19), `KnxRGB` (DPT232.600 — **enum + codec
+     must be extended, see §12**), `KnxPercent` (DPT5.001), `KnxChar` (DPT4),
+     `KnxFloat` (DPT14).
+3. **Retry policy → none in the library.** The ATTiny handles repetition like a
+   TP-UART; the library surfaces the `L_Data.con` result only. See §9.
+4. **Registry → intrusive linked list**, no `MAX_OBJECTS`, no config knob. See §7.
 
 ## 11. Note: CLAUDE.md physical-layer section updated
 
@@ -234,14 +256,15 @@ lib/
     KnxCodec.h/.cpp     symmetric native<->raw encode/decode by DPT (single source of truth)
   KNX_Telegram/  framing, checksum, APDU, addressing; delegates value coding to KNX_Value
   KNX_Driver/    concrete ATTiny/TP-UART UART driver : IKnxDriver  (replaces KNX_TPUART2)
-  KNX/           coordinator: IKnxReceiver* registry, send(ga, KnxValue), dispatch;
-                 owns the injected IKnxDriver*
-  KNX_Object/    KnxObject : IKnxReceiver (base) + intent classes grouped BY DOMAIN
+  KNX/           coordinator: IKnxReceiver linked-list head, send(ga, KnxValue),
+                 dispatch; owns the injected IKnxDriver*
+  KNX_Object/    KnxObject : IKnxReceiver (base, carries `next` ptr) + intent classes BY DOMAIN
     KnxObject.h
-    KnxLighting.h       KnxLight, KnxDimmLight, KnxRGBLight
-    KnxCovers.h         KnxBlind, KnxShutter, KnxAwning
-    KnxClimate.h        KnxThermostat, KnxTempSensor
-    KnxGeneric.h        thin wrappers for odd DPTs
+    KnxLighting.h       KnxLight (DPT1), KnxDimmLight (DPT1+DPT3), KnxRGB (DPT232)
+    KnxCovers.h         KnxBlind (DPT1)
+    KnxClimate.h        KnxTemperature (DPT9), KnxHumidity (DPT9)
+    KnxDateTime.h       KnxTime (DPT10), KnxDate (DPT11), KnxDateTime (DPT19)
+    KnxScalars.h        KnxPercent (DPT5.001), KnxChar (DPT4), KnxFloat (DPT14)
   examples/      KNX_Device (button state machines) demoted here — optional helper from the
                  thesis, NOT part of the core surface, NOT included by KNX.h
 ```
@@ -254,9 +277,10 @@ Dependency arrows (downward, acyclic):
 
 **Cycle-breaking (dependency inversion).** Interfaces are abstract base classes
 (pure virtual, no data) that sit *below* their consumers so both sides can see them:
-- `IKnxReceiver` in `KNX_Common`. `KNX` holds `IKnxReceiver*[]` and **never includes
-  `KnxObject.h`**. `KnxObject` includes `KNX.h` (to `send()` + self-register) and
-  implements `IKnxReceiver`. Arrow is one-way → no cycle.
+- `IKnxReceiver` in `KNX_Common`. `KNX` holds the intrusive linked-list head of
+  `IKnxReceiver` and **never includes `KnxObject.h`**. `KnxObject` includes `KNX.h`
+  (to `send()` + self-register) and implements `IKnxReceiver`. Arrow is one-way →
+  no cycle.
 - `IKnxDriver` in `KNX_Common`. `KNX` holds an injected `IKnxDriver*`; `KNX_Driver`
   implements it. Swapping ATTiny/TP-UART/mock = change the injection only.
 - Promote interfaces to a dedicated `KNX_Interfaces` module only if the contract set
@@ -274,3 +298,8 @@ earned it. Build the **test-case catalog from the spec, not the implementation**
 (every DPT round-trip, boundary values, the DPT3 stepcode table that bit us, GA edge
 cases like `0/0/0`, DPT16 truncation, checksum corruption) so tests catch a wrong
 implementation instead of ratifying it.
+
+**DPT coverage note:** the current `KNX_DPT` enum stops at DPT19. `KnxRGB` needs
+**DPT232.600** (3-byte R/G/B) — extend the enum (`KnxEnums.h`) and add a codec
+entry (`KnxCodec`) for it. All other v1 intent classes map to DPTs already in the
+enum (see §10).
