@@ -193,9 +193,68 @@ Boundaries / decisions:
 3. **Retry/confirmation policy** on `L_Data.con` failure (count, backoff).
 4. **`MAX_OBJECTS`** sizing.
 
-## 11. Note: CLAUDE.md migration section is now partly stale
+## 11. Note: CLAUDE.md physical-layer section updated
 
-`CLAUDE.md` → "Planned migration: TP-UART2 → STKNX" assumes bit-banging the STKNX
-on the main MCU with hardware-timer ISRs (13 µs tick, per-platform `#ifdef`). That
-is superseded: **an external ATTiny handles timing and presents a TP-UART-like
-UART interface.** Update that section when convenient (not required for this plan).
+DONE (this session, commit `4b37b30`): `CLAUDE.md`'s old "Planned migration:
+TP-UART2 → STKNX" section was rewritten to "Physical layer: STKNX behind an ATTiny
+co-processor" — the ATTiny handles timing and presents a TP-UART-like UART
+interface (superseding the earlier bit-bang-on-main-MCU plan).
+
+## 12. File layout (agreed module structure)
+
+Renamed/new modules under `lib/`. Dependency flow is strictly downward, acyclic.
+
+```
+lib/
+  KNX_Common/    (was KNX_Defines — renamed; "Defines" meant #defines, but it holds
+                  types + contracts. "Core" avoided → clashes with the KNX coordinator.)
+    KNX_Common.h        umbrella — #includes the rest (old include path aliases here)
+    KnxEnums.h          KNX_DPT, priorities, Switching/Dimming behaviours, DimmIncrement
+    KnxAddress.h        packed GroupAddress / PhysicalAddress + parse/format inlines
+    KnxTelegramTypes.h  ParsedTelegram, KnxEvent
+    KnxInterfaces.h     IKnxDriver, IKnxReceiver  (own file, separate from passive types)
+  KNX_Value/     NEW — value currency + symmetric codec. PURE (Arduino-free), host-testable.
+    KnxValue.h          KnxValue tagged type + Dpt1(..)..Dpt19(..) typed ctors
+    KnxCodec.h/.cpp     symmetric native<->raw encode/decode by DPT (single source of truth)
+  KNX_Telegram/  framing, checksum, APDU, addressing; delegates value coding to KNX_Value
+  KNX_Driver/    concrete ATTiny/TP-UART UART driver : IKnxDriver  (replaces KNX_TPUART2)
+  KNX/           coordinator: IKnxReceiver* registry, send(ga, KnxValue), dispatch;
+                 owns the injected IKnxDriver*
+  KNX_Object/    KnxObject : IKnxReceiver (base) + intent classes grouped BY DOMAIN
+    KnxObject.h
+    KnxLighting.h       KnxLight, KnxDimmLight, KnxRGBLight
+    KnxCovers.h         KnxBlind, KnxShutter, KnxAwning
+    KnxClimate.h        KnxThermostat, KnxTempSensor
+    KnxGeneric.h        thin wrappers for odd DPTs
+  examples/      KNX_Device (button state machines) demoted here — optional helper from the
+                 thesis, NOT part of the core surface, NOT included by KNX.h
+```
+
+Dependency arrows (downward, acyclic):
+- `KNX_Object → KNX → {KNX_Telegram, KNX_Value, KnxInterfaces}`
+- `KNX_Telegram → KNX_Value → KNX_Common`
+- `KNX_Driver → KnxInterfaces` (implements `IKnxDriver`)
+- everything → `KNX_Common`
+
+**Cycle-breaking (dependency inversion).** Interfaces are abstract base classes
+(pure virtual, no data) that sit *below* their consumers so both sides can see them:
+- `IKnxReceiver` in `KNX_Common`. `KNX` holds `IKnxReceiver*[]` and **never includes
+  `KnxObject.h`**. `KnxObject` includes `KNX.h` (to `send()` + self-register) and
+  implements `IKnxReceiver`. Arrow is one-way → no cycle.
+- `IKnxDriver` in `KNX_Common`. `KNX` holds an injected `IKnxDriver*`; `KNX_Driver`
+  implements it. Swapping ATTiny/TP-UART/mock = change the injection only.
+- Promote interfaces to a dedicated `KNX_Interfaces` module only if the contract set
+  grows past these two.
+
+**User include:** `#include <KNX.h>` pulls in the coordinator + `KnxValue` +
+`KnxObject` + the intent domain headers → one include for the whole simple-usage
+surface. Raw `KnxObject` / `KnxValue` ride along for the advanced tiers.
+
+**Host-testable core** (refines §9): `KNX_Common` + `KNX_Value` (+ most of
+`KNX_Telegram`) are Arduino-free by construction. Approach — **write testable code
+now, wire CI later**: build the codec Arduino-free from day one, add the native test
+env (`pio test -e native` + Unity) and a GH Actions job once the codec exists and has
+earned it. Build the **test-case catalog from the spec, not the implementation**
+(every DPT round-trip, boundary values, the DPT3 stepcode table that bit us, GA edge
+cases like `0/0/0`, DPT16 truncation, checksum corruption) so tests catch a wrong
+implementation instead of ratifying it.
