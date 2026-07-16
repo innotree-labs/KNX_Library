@@ -1,169 +1,140 @@
 #pragma once
 /**
  * @name KNX.h
- * @date 25.10.2025
+ * @date 16.07.2026
  * @authors Florian Wiesner
- * @details High-level KNX coordinator. Owns the TP-UART2 driver and telegram encoder/decoder,
- *          manages group address bindings, and dispatches decoded events to registered callbacks.
+ * @details High-level KNX coordinator. Owns an injected link-layer driver (IKnxDriver),
+ *          assembles outgoing telegrams from a KnxValue via KnxFrame, and dispatches incoming
+ *          telegrams to an intrusive list of IKnxReceiver objects that decode with their own
+ *          DPT (PLAN §5–7). The core is Arduino-free and depends only on the driver interface,
+ *          so it is host-testable with a mock driver; the String conveniences and the legacy
+ *          KnxEvent bind path are transitional and confined to #ifdef ARDUINO.
 */
 
-#ifdef _MSC_VER
-	#pragma region Libraries //--------------------------------------------------------------------------------------------------
-#endif
+//---- Standard / platform libraries ----
+#include <cstdint>
+#ifdef ARDUINO
 #include <Arduino.h>
-#include "KNX_Defines.h"
-#include "KNX_TPUART2.h"
-#include "KNX_Telegram.h"
-
-#ifdef _MSC_VER
-	#pragma endregion
-	#pragma region KNX-Class //--------------------------------------------------------------------------------------------------
 #endif
+
+//---- Custom shared types + module headers ----
+#include "KnxInterfaces.h"   // IKnxDriver, IKnxReceiver
+#include "KnxAddress.h"
+#include "KnxValue.h"
+#include "KnxFrame.h"        // framing (pulls in KnxCodec)
+
 class KNX {
-	#ifdef _MSC_VER
-		#pragma endregion
-		#pragma region private
-	#endif
 	private:
-		//----Definitions----
-		static constexpr uint8_t MAX_BINDINGS = 32;
+		//---- Config ----
+		// RX buffer holds a full standard frame (up to 6 header + 16 APDU + checksum).
+		static constexpr uint8_t RX_BUFFER_SIZE = 24;
 
-		//----Members----
-		KNX_Binding bindings[MAX_BINDINGS];
-		uint8_t bindingCount = 0;
+		//---- Members ----
+		IKnxDriver*    p_driver;                 // injected link-layer driver
+		PhysicalAddress physicalAddress;         // frame source address
+		IKnxReceiver*  receiverHead = nullptr;   // intrusive registry head
+		uint8_t        rxFrame[RX_BUFFER_SIZE];
 
-		//----Methods----
-		static void telegramParsedTrampoline(void* ctx, const ParsedTelegram& tg);
-		void handleParsedTelegram(ParsedTelegram tg);
+		//---- Methods ----
+		// Walks the receiver registry and delivers a parsed telegram to every match.
+		void dispatch(const ParsedTelegram& telegram);
 
-	#ifdef _MSC_VER
-		#pragma endregion
-		#pragma region public
-	#endif
 	public:
-		//----Constructor----
+		//---- Constructor ----
 		/**
-		 * @brief Constructs the KNX coordinator and wires the internal driver and telegram objects.
-		 * @param physicalAddress Physical address of this device on the KNX bus (e.g. "1.1.5").
+		 * @brief Constructs the coordinator around an injected driver and this device's address.
+		 * @param driver          Link-layer driver (not owned; must outlive the coordinator).
+		 * @param physicalAddress Physical address of this device (frame source).
 		*/
-		KNX(String physicalAddress)
-			: tpuart(physicalAddress), telegram(&tpuart) {
-				tpuart.attachTelegramPointer(&telegram);
-				telegram.setParsedCallback(&KNX::telegramParsedTrampoline, this);
-			}
+		KNX(IKnxDriver* driver, PhysicalAddress physicalAddress)
+			: p_driver(driver), physicalAddress(physicalAddress) {}
 
-		//----Public methods----
+		//---- Lifecycle (delegated to the driver) ----
 		/**
-		 * @brief Initialises KNX communication: configures UART, resets TP-UART, sets physical address.
-		 * @return true if initialisation succeeded and state indication is OK.
+		 * @brief Brings the link layer up.
+		 * @return true if the driver initialised successfully.
 		*/
-		bool begin(void);
+		bool begin(void) { return p_driver->begin(); }
 
 		/**
-		 * @brief Resets the TP-UART and re-applies the physical address.
-		 * @return true if the reset succeeded and state indication is OK.
+		 * @brief Resets the link layer.
+		 * @return true if the reset succeeded.
 		*/
-		bool reset(void);
+		bool reset(void) { return p_driver->reset(); }
 
 		/**
-		 * @brief Checks the SAVE and TW interrupt flags for bus voltage loss or temperature warning.
-		 * @return true if any fault condition is active.
+		 * @brief Checks for a bus-voltage or temperature fault reported by the driver.
+		 * @return true if a fault occurred since the last call.
 		*/
-		bool monitorTPUART(void);
+		bool monitorTPUART(void) { return p_driver->faultPending(); }
+
+		//---- Sending ----
+		/**
+		 * @brief Encodes a value and transmits it to a packed group address.
+		 * @param groupAddress Packed destination group address.
+		 * @param value        Typed value to send.
+		 * @return true if the driver returned a positive L_Data.con (PLAN §9).
+		*/
+		bool send(uint16_t groupAddress, const KnxValue& value);
+
+		//---- Receiving ----
+		/**
+		 * @brief Links a receiver into the intrusive registry (idempotent).
+		 * @param receiver Receiver to register; not owned, must outlive the coordinator.
+		*/
+		void registerReceiver(IKnxReceiver* receiver);
 
 		/**
-		 * @brief Processes pending UART RX bytes, handles status codes, and dispatches incoming telegrams.
-		 * @return true if a complete telegram was received and processed.
+		 * @brief Unlinks a receiver from the registry (safe if not registered).
+		 * @param receiver Receiver to remove.
+		*/
+		void unregisterReceiver(IKnxReceiver* receiver);
+
+		/**
+		 * @brief Drains complete frames from the driver, parses and dispatches each.
+		 * @return true if at least one telegram was processed this call.
 		*/
 		bool handleUART(void);
 
 		/**
-		 * @brief Registers a callback for a group address / DPT pair.
-		 * @param gaStr Group address string (e.g. "0/3/0").
-		 * @param dpt   Expected DPT used to decode the payload.
-		 * @param cb    Callback invoked with the decoded KnxEvent.
-		 * @return true if the binding was added successfully.
+		 * @brief This device's physical address (frame source).
+		 * @return The stored physical address.
+		*/
+		PhysicalAddress address(void) const { return physicalAddress; }
+
+// ================= Transitional Arduino conveniences (migrate to KnxObject) =================
+#ifdef ARDUINO
+	public:
+		/**
+		 * @brief Arduino convenience: construct from a driver and a "area.line.device" string.
+		*/
+		KNX(IKnxDriver* driver, String physicalAddress)
+			: p_driver(driver), physicalAddress(physicalAddressFromString(physicalAddress)) {}
+
+		// Stateless one-liners over send() — thin sugar kept so the legacy device/app layer
+		// builds until it is rebuilt on KnxObject (PLAN §8).
+		bool send(String ga, const KnxValue& value)                { return send(packedGroupAddressFromString(ga), value); }
+		bool switchLight(String ga, bool state)                    { return send(ga, Dpt1(state)); }
+		bool dimLightInterval(String ga, bool dir, DimmIncrement i) { return send(ga, Dpt3(dir, (uint8_t)i)); }
+		bool dimLightValue(String ga, uint8_t percent)             { return send(ga, Dpt5((uint8_t)map(percent, 0, 100, 0, 255))); }
+		bool blindOpenClose(String ga, bool direction)             { return send(ga, Dpt1(direction)); }
+		bool blindStopStep(String ga, bool step)                   { return send(ga, Dpt1(step)); }
+		bool blindPositionValue(String ga, uint8_t position)       { return send(ga, Dpt5((uint8_t)map(position, 0, 100, 0, 255))); }
+		bool sendTemperature(String ga, float temperature)         { return send(ga, Dpt9(temperature)); }
+		bool sendHumidity(String ga, float humidity)               { return send(ga, Dpt9(humidity)); }
+
+		/**
+		 * @brief Legacy binding: registers a KnxEvent callback for a group address / DPT.
+		 * @return true if the binding was stored.
 		*/
 		bool bind(String gaStr, KNX_DPT dpt, KNX_Callback cb);
 
-		/**
-		 * @brief Sends a DPT1 switch telegram to a light group address.
-		 * @param targetGroupAddress Target KNX group address string.
-		 * @param state              true = on, false = off.
-		 * @return true on success.
-		*/
-		bool switchLight(String targetGroupAddress, bool state);
-
-		/**
-		 * @brief Sends a DPT3 incremental dimming telegram.
-		 * @param targetGroupAddress Target KNX group address string.
-		 * @param direction          true = brighter, false = darker.
-		 * @param increment          Step size for the dimming command.
-		 * @return true on success.
-		*/
-		bool dimLightInterval(String targetGroupAddress, bool direction, DimmIncrement increment);
-
-		/**
-		 * @brief Sends a DPT5 absolute dim-value telegram (0–100 % mapped to 0–255).
-		 * @param targetGroupAddress Target KNX group address string.
-		 * @param dimValue           Brightness percentage (0–100).
-		 * @return true on success.
-		*/
-		bool dimLightValue(String targetGroupAddress, uint8_t dimValue);
-
-		/**
-		 * @brief Sends a DPT1 blind open/close telegram.
-		 * @param targetGroupAddress Target KNX group address string.
-		 * @param direction          true = up/open, false = down/close.
-		 * @return true on success.
-		*/
-		bool blindOpenClose(String targetGroupAddress, bool direction);
-
-		/**
-		 * @brief Sends a DPT1 blind stop/step telegram.
-		 * @param targetGroupAddress Target KNX group address string.
-		 * @param step               true = short press (step), false = stop.
-		 * @return true on success.
-		*/
-		bool blindStopStep(String targetGroupAddress, bool step);
-
-		/**
-		 * @brief Sends a DPT5 absolute blind position telegram (0–100 % mapped to 0–255).
-		 * @param targetGroupAddress Target KNX group address string.
-		 * @param position           Position percentage (0–100).
-		 * @return true on success.
-		*/
-		bool blindPositionValue(String targetGroupAddress, uint8_t position);
-
-		/**
-		 * @brief Sends a DPT9 temperature telegram.
-		 * @param targetGroupAddress Target KNX group address string.
-		 * @param temperature        Temperature value in °C.
-		 * @return true on success.
-		*/
-		bool sendTemperature(String targetGroupAddress, float temperature);
-
-		/**
-		 * @brief Sends a DPT9 humidity telegram.
-		 * @param targetGroupAddress Target KNX group address string.
-		 * @param humidity           Relative humidity in %.
-		 * @return true on success.
-		*/
-		bool sendHumidity(String targetGroupAddress, float humidity);
-
-		/**
-		 * @brief Sends a telegram of arbitrary DPT using a raw value pointer.
-		 * @param targetGroupAddress Target KNX group address string.
-		 * @param dpt                DPT that determines encoding.
-		 * @param value              Pointer to the value to encode and send.
-		 * @return true on success.
-		*/
-		bool sendTelegram(String targetGroupAddress, KNX_DPT dpt, void* value);
-
-		//----Public data----
-		KNX_TPUART2 tpuart;
-		KNX_Telegram telegram;
+	private:
+		//---- Legacy KnxEvent bind path (deleted with the device-layer rewrite) ----
+		static constexpr uint8_t MAX_BINDINGS = 8;
+		KNX_Binding legacyBindings[MAX_BINDINGS];
+		uint8_t     legacyBindingCount = 0;
+		// Decodes and fires any legacy bindings matching a parsed telegram.
+		void dispatchLegacy(const ParsedTelegram& telegram);
+#endif // ARDUINO
 };
-#ifdef _MSC_VER
-	#pragma endregion
-#endif

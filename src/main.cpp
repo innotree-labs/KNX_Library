@@ -8,12 +8,14 @@
 
 #include <Arduino.h>
 #include <KNX.h>
+#include <KNX_Driver.h>
 #include <KNX_Device.h>
 
 #define TPUART_PHYS_ADDR "1.1.5"
 #define BAUDRATE_SERIAL 115200
 
-KNX knx = KNX(TPUART_PHYS_ADDR);
+KNX_Driver knxDriver(TPUART_PHYS_ADDR);
+KNX knx = KNX(&knxDriver, TPUART_PHYS_ADDR);
 TwoButtonDimming rocker1_TwoButtonDimming(&knx);
 
 void onStatusLightA(const KnxEvent& event);

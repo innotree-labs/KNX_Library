@@ -1,126 +1,118 @@
 /**
  * @name KNX.cpp
- * @date 25.10.2025
+ * @date 16.07.2026
  * @authors Florian Wiesner
- * @details See KNX.h
+ * @details See KNX.h.
 */
 
 //----Libraries----
 #include "KNX.h"
 
-#ifdef _MSC_VER
-	#pragma region Public methods
-#endif
+//---- Sending ----
 
-bool KNX::begin(void) {
-	tpuart.begin();
-	bool error = tpuart.resetRequest();
-	tpuart.setPhysicalAddress();
-
-	if (tpuart.stateRequest() == 0x07 && !error) return true;
-	else return false;
+bool KNX::send(uint16_t groupAddress, const KnxValue& value) {
+	uint8_t frame[KnxFrame::MAX_FRAME];
+	uint8_t len = KnxFrame::build(physicalAddress, groupAddress, value, frame, sizeof(frame));
+	if (len == 0) return false;
+	return p_driver->sendTelegram(frame, len);
 }
 
-bool KNX::reset(void) {
-	bool error = tpuart.resetRequest();
-	tpuart.setPhysicalAddress();
+//---- Receiver registry (intrusive singly-linked list) ----
 
-	if (tpuart.stateRequest() == 0x07 && !error) return true;
-	else return false;
+void KNX::registerReceiver(IKnxReceiver* receiver) {
+	if (!receiver) return;
+	// Idempotent: don't double-link an already-registered receiver.
+	for (IKnxReceiver* n = receiverHead; n != nullptr; n = n->nextReceiver) {
+		if (n == receiver) return;
+	}
+	receiver->nextReceiver = receiverHead;
+	receiverHead = receiver;
 }
 
-bool KNX::monitorTPUART(void) {
-	return tpuart.watchBusVoltage() || tpuart.watchTemperature();
-}
-
-bool KNX::handleUART(void) {
-	return tpuart.checkUART();
-}
-
-bool KNX::switchLight(String targetGroupAddress, bool state) {
-	return telegram.sendDPT1(targetGroupAddress, state);
-}
-
-bool KNX::dimLightInterval(String targetGroupAddress, bool direction, DimmIncrement increment) {
-	// direction = 1 -> heller, 0 -> dunkler; increment = step size (3 bit)
-	uint8_t data = ((direction & 0x01) << 3) | ((uint8_t)increment & 0x07);
-	return telegram.sendDPT3(targetGroupAddress, data);
-}
-
-bool KNX::dimLightValue(String targetGroupAddress, uint8_t dimValue) {
-	uint8_t value = map(dimValue, 0, 100, 0, 255); // KNX 0..255
-	return telegram.sendDPT5(targetGroupAddress, value);
-}
-
-bool KNX::blindOpenClose(String targetGroupAddress, bool direction) {
-	return telegram.sendDPT1(targetGroupAddress, direction);
-}
-
-bool KNX::blindStopStep(String targetGroupAddress, bool step) {
-	return telegram.sendDPT1(targetGroupAddress, step);
-}
-
-bool KNX::blindPositionValue(String targetGroupAddress, uint8_t position) {
-	uint8_t value = map(position, 0, 100, 0, 255);
-	return telegram.sendDPT5(targetGroupAddress, value);
-}
-
-bool KNX::sendTemperature(String targetGroupAddress, float temperature) {
-	return telegram.sendDPT9(targetGroupAddress, temperature);
-}
-
-bool KNX::sendHumidity(String targetGroupAddress, float humidity) {
-	return telegram.sendDPT9(targetGroupAddress, humidity);
-}
-
-bool KNX::bind(String gaStr, KNX_DPT dpt, KNX_Callback cb) {
-	if (bindingCount >= MAX_BINDINGS) return false;
-	if (!cb) return false;
-
-	bindings[bindingCount].ga       = groupAddressFromString(gaStr);
-	bindings[bindingCount].dpt      = dpt;
-	bindings[bindingCount].callback = cb;
-
-	bindingCount++;
-	return true;
-}
-
-#ifdef _MSC_VER
-	#pragma endregion
-	#pragma region Private methods
-#endif
-
-// Static trampoline: forwards the C-style callback to the owning KNX instance
-void KNX::telegramParsedTrampoline(void* ctx, const ParsedTelegram& tg) {
-	if (!ctx) return;
-	static_cast<KNX*>(ctx)->handleParsedTelegram(tg);
-}
-
-// Matches the telegram against all bindings, decodes it, and fires the callback
-void KNX::handleParsedTelegram(ParsedTelegram tg) {
-	for (uint8_t i = 0; i < bindingCount; i++) {
-		if (!gaEqual(bindings[i].ga, tg.target)) continue;
-
-		tg.dpt = bindings[i].dpt; // Set DPT from the registry (important!)
-
-		if (!telegram.decode(tg)) {
-			#ifdef DEBUG
-			Serial.println("Received telegram data is invalid!");
-			#endif
-			continue;
+void KNX::unregisterReceiver(IKnxReceiver* receiver) {
+	IKnxReceiver** link = &receiverHead;
+	while (*link != nullptr) {
+		if (*link == receiver) {
+			*link = receiver->nextReceiver;
+			receiver->nextReceiver = nullptr;
+			return;
 		}
-
-		KnxEvent ev{};
-		ev.source = tg.source;
-		ev.target = tg.target;
-		ev.type   = tg.type;
-		ev.dpt    = tg.dpt;
-		ev.value  = tg.decoded;
-
-		bindings[i].callback(ev);
+		link = &(*link)->nextReceiver;
 	}
 }
 
-#ifdef _MSC_VER
-	#pragma endregion
-#endif
+void KNX::dispatch(const ParsedTelegram& telegram) {
+	uint16_t ga = packGroupAddress(telegram.target);
+	for (IKnxReceiver* r = receiverHead; r != nullptr; r = r->nextReceiver) {
+		if (r->matches(ga)) r->receive(telegram);
+	}
+}
+
+//---- Receiving ----
+
+bool KNX::handleUART(void) {
+	bool processed = false;
+	uint8_t len = 0;
+
+	// Drain every complete frame the driver has reassembled this cycle.
+	while (p_driver->poll(rxFrame, sizeof(rxFrame), len)) {
+		ParsedTelegram telegram;
+		if (!KnxFrame::parse(rxFrame, len, telegram)) continue;
+
+		dispatch(telegram);
+		#ifdef ARDUINO
+		dispatchLegacy(telegram);
+		#endif
+		processed = true;
+	}
+	return processed;
+}
+
+//---- Legacy KnxEvent bind path (Arduino only; removed with the device-layer rewrite) ----
+#ifdef ARDUINO
+
+bool KNX::bind(String gaStr, KNX_DPT dpt, KNX_Callback cb) {
+	if (legacyBindingCount >= MAX_BINDINGS || !cb) return false;
+	legacyBindings[legacyBindingCount].ga       = groupAddressFromString(gaStr);
+	legacyBindings[legacyBindingCount].dpt      = dpt;
+	legacyBindings[legacyBindingCount].callback = cb;
+	legacyBindingCount++;
+	return true;
+}
+
+void KNX::dispatchLegacy(const ParsedTelegram& telegram) {
+	for (uint8_t i = 0; i < legacyBindingCount; i++) {
+		if (!gaEqual(legacyBindings[i].ga, telegram.target)) continue;
+
+		KNX_DPT dpt = legacyBindings[i].dpt;
+		const uint8_t* in;
+		uint8_t inLen;
+		if (KnxCodec::isInline6(dpt)) { in = &telegram.inline6Data; inLen = 1; }
+		else                          { in = telegram.payload;      inLen = telegram.payloadLength; }
+
+		KnxValue kv = KnxCodec::decode(dpt, in, inLen);
+		if (!kv.isValid()) continue;
+
+		KnxEvent ev{};
+		ev.source = telegram.source;
+		ev.target = telegram.target;
+		ev.type   = telegram.type;
+		ev.dpt    = dpt;
+
+		// Minimal native mapping — DPT1 is the only type the legacy app path exercises.
+		switch (dpt) {
+			case KNX_DPT::DPT1: ev.value.dpt1 = kv.asBool(); break;
+			case KNX_DPT::DPT2: ev.value.dpt2 = kv.asU8();   break;
+			case KNX_DPT::DPT3: ev.value.dpt3.direction = kv.asDim().increase;
+			                    ev.value.dpt3.step      = kv.asDim().stepcode; break;
+			case KNX_DPT::DPT4: ev.value.dpt4 = kv.asChar(); break;
+			case KNX_DPT::DPT5: ev.value.dpt5.raw     = kv.asU8();
+			                    ev.value.dpt5.percent = kv.asU8() * 100.0f / 255.0f; break;
+			default: continue;
+		}
+
+		legacyBindings[i].callback(ev);
+	}
+}
+
+#endif // ARDUINO

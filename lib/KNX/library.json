@@ -1,0 +1,11 @@
+{
+  "name": "KNX",
+  "version": "0.1.0",
+  "description": "High-level KNX coordinator: owns an injected IKnxDriver, sends KnxValues via KnxFrame, and dispatches incoming telegrams to an intrusive IKnxReceiver registry. Core is Arduino-free and host-testable.",
+  "frameworks": "*",
+  "platforms": "*",
+  "dependencies": {
+    "KNX_Common": "*",
+    "KNX_Frame": "*"
+  }
+}
