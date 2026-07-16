@@ -11,6 +11,7 @@
 #include <unity.h>
 #include "KnxCodec.h"
 #include "KnxEnums.h"
+#include "KnxAddress.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -216,6 +217,34 @@ void test_failure_paths(void) {
 	TEST_ASSERT_FALSE(KnxCodec::decode(KNX_DPT::UNKNOWN, &one, 1).isValid());
 }
 
+//---- Group address packing: hot-path currency for every send and RX match ----
+void test_ga_pack_roundtrip(void) {
+	const GroupAddress cases[] = {
+		{ 0, 0, 0 },        // edge: all-zero
+		{ 31, 7, 255 },     // edge: all-max (5/3/8 bits)
+		{ 0, 3, 0 },        // 0/3/0 — the status GA used in the app
+		{ 18, 5, 200 },     // arbitrary mid value
+	};
+	for (const GroupAddress& ga : cases) {
+		uint16_t packed = packGroupAddress(ga);
+		GroupAddress back = unpackGroupAddress(packed);
+		TEST_ASSERT_TRUE(gaEqual(ga, back));
+	}
+}
+
+void test_ga_pack_bit_layout(void) {
+	// main[5] << 11 | middle[3] << 8 | sub[8]
+	TEST_ASSERT_EQUAL_UINT16(0x0000, packGroupAddress(GroupAddress{ 0, 0, 0 }));
+	TEST_ASSERT_EQUAL_UINT16(0xFFFF, packGroupAddress(GroupAddress{ 31, 7, 255 }));
+	TEST_ASSERT_EQUAL_UINT16((18u << 11) | (5u << 8) | 200u, packGroupAddress(GroupAddress{ 18, 5, 200 }));
+}
+
+void test_ga_equal(void) {
+	TEST_ASSERT_TRUE(gaEqual(GroupAddress{ 0, 3, 0 }, GroupAddress{ 0, 3, 0 }));
+	TEST_ASSERT_FALSE(gaEqual(GroupAddress{ 0, 3, 0 }, GroupAddress{ 0, 3, 1 }));
+	TEST_ASSERT_FALSE(gaEqual(GroupAddress{ 0, 3, 0 }, GroupAddress{ 1, 3, 0 }));
+}
+
 int main(int, char**) {
 	UNITY_BEGIN();
 	RUN_TEST(test_dimincrement_enum_fixed);
@@ -235,5 +264,8 @@ int main(int, char**) {
 	RUN_TEST(test_dpt19);
 	RUN_TEST(test_dpt232);
 	RUN_TEST(test_failure_paths);
+	RUN_TEST(test_ga_pack_roundtrip);
+	RUN_TEST(test_ga_pack_bit_layout);
+	RUN_TEST(test_ga_equal);
 	return UNITY_END();
 }
