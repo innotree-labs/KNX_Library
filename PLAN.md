@@ -1,0 +1,201 @@
+# PLAN — KNX Library Redesign (Adafruit-style API)
+
+Status: **agreed design, not yet implemented.** Implementation to start in a
+later session. This document is the handoff artifact — it captures the decisions
+reached, the rationale, and the open forks that remain.
+
+---
+
+## 1. Product context (decides everything below)
+
+We ship a **breakout board + a simple Arduino library** — the "Adafruit model"
+for KNX. The value proposition is *simplicity*: it works out of the box, the user
+writes a few lines, no ETS, no KNX-stack expertise required.
+
+Decided constraints:
+
+- **No ETS programmability.** Group addresses are **hardcoded in user sketches** —
+  an accepted trade-off in exchange for a far simpler experience than
+  thelsing/knx or OpenKNX.
+- **The user should not need to know DPTs** for common cases. Intent, not datatype,
+  is the user-facing vocabulary.
+- **Physical/timing layer is an external ATTiny** that behaves like a TP-UART
+  (UART peer). Bit-level timing is *not* this library's problem. → The async /
+  hardware-timer / RMT discussion from the migration notes is **out of scope**;
+  see §9.
+- **Portability = stay on the Arduino API.** `#include <Arduino.h>` is the
+  enabler for "runs on many controllers" (AVR/ESP32/RP2040/SAMD/STM32), exactly
+  like Adafruit. We do **not** decouple from Arduino for portability. (Optional
+  host-testability is a separate, low-priority goal — see §9.)
+
+## 2. What we keep from the current codebase
+
+The existing foundation is sound and survives:
+
+- Strictly **downward layering** (physical → telegram → coordinator → device).
+- **Dependency injection by pointer, no singletons.**
+- **No dynamic allocation** — fixed, bounded arrays.
+- The **RX registry** concept (`bind()` today) — generalized in §6.
+- Doc discipline (JSDoc on public methods), project style overrides
+  (camelCase methods, `#define`, `_camelCase` flags).
+
+## 3. The three ways to send (core UX)
+
+All three are front doors onto **one encode path** and **one value currency**
+(§4). The DPT is progressively hidden as the tier gets more specific.
+
+| Tier | Example | DPT | Methods / state | Address |
+|---|---|---|---|---|
+| **Intent object** | `KnxLight kitchen(knx, cmdGa, statusGa);` | hidden inside | rich (`.on/.off/.toggle`), value cache | fixed at construction |
+| **Raw object** | `KnxObject o(knx, ga, KNX_DPT::DPT9);` | user gives once | generic (`.write/.onUpdate`), value cache | fixed at construction |
+| **Stateless send** | `knx.send("0/4/2", Dpt9(21.5f));` | user gives per call (inside value) | none | **any GA at runtime** |
+
+- Intent objects cover the common 80% (Light, DimmLight, Blind, …).
+- Raw `KnxObject` covers types we didn't wrap — user specifies the DPT once,
+  gets only generic methods (we don't know their intent).
+- Stateless `send()` is the only tier that can address a **runtime-computed GA**
+  (loop, value from WiFi, etc.). It has **no receive** — see §6.
+
+## 4. The value type — `Dpt` / `KnxValue` (keystone)
+
+**Decision: value objects, NOT a `sendDPTn(...)` method family.** (Fork resolved
+in favor of value types.)
+
+Replace the unsafe `sendTelegram(ga, dpt, void* value)` — **delete it** — with a
+single typed value that carries its own DPT and correctly-typed payload:
+
+```cpp
+knx.send("0/1/1", Dpt1(true));     // Dpt1 accepts only bool
+knx.send("0/4/2", Dpt9(21.5f));    // Dpt9 accepts only float
+knx.send("0/2/5", Dpt5(200));      // Dpt5 accepts only uint8_t
+```
+
+- A payload/DPT mismatch becomes a **compile error**, not a silent wrong
+  telegram (this is the failure class that produced the `DimmIncrement` bug).
+- The DPT is explicit here (correct for this advanced tier) but lives **inside
+  the value**, never as a loose parallel argument.
+- The **same value type is the library's one currency**:
+  - `obj.write(Dpt9(21.5f))` — raw object write
+  - `light.on()` — intent object constructs `Dpt1(true)` internally
+  - the RX side hands a decoded value back out (§6)
+
+**Runtime-variable DPT** (rare; a generic bus tool where the DPT itself is a
+variable): a tagged `KnxValue { KNX_DPT dpt; union payload; }` built through
+checked factory calls, passed to `send()`. Encapsulated + validated inside one
+type — **never a bare `void*`.** Bottom escape hatch; most users never touch it.
+
+## 5. `KnxObject` base + intent subclasses
+
+- `KnxObject` holds: GA(s), DPT, cached last value, callback (function pointer).
+- Intent subclasses (`KnxLight`, `KnxDimmLight`, `KnxBlind`, …) wrap a
+  `KnxObject`, **hide the DPT**, and expose intent methods. Their methods are
+  thin sugar over the same `send()` / `write()` path — **one encode
+  implementation, not a parallel one.**
+- **Callbacks are plain function pointers** (`void(*)(...)`, like today's
+  `KNX_Callback`). **No capturing lambdas / `std::function`** — they heap-allocate
+  and bloat on AVR.
+
+### Command GA vs status GA (decided: combine on intent objects)
+
+Real installations command a light on one GA (`0/1/1`) and read status on another
+(`0/3/0`). Intent objects take **both**, with status defaulting to the command GA
+when omitted:
+
+```cpp
+KnxLight kitchen(knx, "0/1/1", "0/3/0");  // sends to cmd, listens on status
+KnxLight lamp(knx, "0/1/2");              // status defaults to cmd GA
+```
+
+`.toggle()` flips relative to the **status-fed cached value**, so it tracks the
+real bus state, not just what we last sent. This kills the per-class
+`lastToggleState` / `toggleState` bookkeeping in the current Device layer.
+
+## 6. Receiving model
+
+One idea drives it: **an object knows its own GA + DPT, so it decodes on receive
+without the user restating either.** This fixes the current asymmetry where
+`bind(GA, DPT, cb)` leaks the DPT while sending hides it.
+
+Flow:
+
+1. On construction (or first `.onUpdate()`), the object registers a pointer to
+   itself in the coordinator's RX registry — the same bounded, no-heap array that
+   is `bindings[]` today, now holding `KnxObject*` (replaces the `{GA,DPT,cb}`
+   row). Keep the "match all bindings" loop from `handleParsedTelegram`.
+2. Incoming telegram → scan registry for objects whose **listen GA** matches.
+3. Decode payload with **the object's** DPT.
+4. Update the object's **cached value**.
+5. Fire the object's callback.
+
+Callback shapes (decoded, no user-side DPT):
+
+```cpp
+kitchen.onUpdate(void(*)(bool on));            // intent → decoded native type
+o.onUpdate(void(*)(const KnxValue& v));        // raw → generic value, v.asFloat() etc.
+```
+
+Boundaries / decisions:
+
+- **Dynamic send is free-function; dynamic receive needs an object** (somewhere to
+  hold the callback + cache). The stateless tier has no receive by definition.
+  Document this plainly.
+- **Lifetime:** registry holds raw pointers → objects must outlive it (globals /
+  class members — already the pattern, e.g. `rocker1`). Add a **deregister in the
+  destructor** so a scoped object can't dangle. Document "declare KNX objects at
+  global/member scope."
+- **Value cache read-back:** `.value()` returns last-known with no bus traffic;
+  it's what makes `.toggle()` and "is it on?" work without external state.
+
+## 7. Registry change (concrete)
+
+- Today: `KNX_Binding bindings[MAX_BINDINGS]` of `{GA, DPT, callback}`.
+- New: array of `KnxObject*` (bounded, e.g. `MAX_OBJECTS`). The coordinator's
+  incoming-telegram handler iterates, matches on listen GA, and delegates decode
+  + cache + callback to the object.
+- `KNX::bind(...)` as a free-standing DPT-leaking call is **removed**; its role is
+  served by constructing an object (raw is enough:
+  `KnxObject o(knx, ga, dpt); o.onUpdate(cb);`).
+
+## 8. Rebuild the Device layer on top
+
+- `TwoButtonDimming` / `TwoButtonSwitching` / `SingleButtonSwitching` take
+  `KnxLight` / `KnxObject` references instead of holding `String` GAs and rolling
+  their own toggle state. The button state machine (`SingleButtonOperation` etc.)
+  is unchanged; only what it *commands* changes to the object currency.
+- Replace `String` group addresses in hot paths with a **packed GA value type**
+  (`uint16_t` under the hood) constructed once, to avoid per-send re-parsing and
+  heap churn. (Arduino `String` is allowed at construction/config time, not in the
+  send loop.)
+
+## 9. Correctness + housekeeping folded in
+
+- **`L_Data.con`:** stop hard-returning `true` from the send path. The ATTiny
+  (TP-UART-like) returns a transmit confirmation — parse it and surface real
+  success/failure (and a retry policy). Needed for a product.
+- **DPT subsystem:** make encode/decode **symmetric** and the single source of
+  truth. Concretely fixes the `DimmIncrement` enum: `Stop` and `Percent_1_5` both
+  `0x00` (collision), and the percent→stepcode ordering is inverted
+  (stepcode encodes number of intervals: stepcode 1 ≈ 100 %, 7 ≈ 1.5 %).
+  Verify against the DPT3.007 spec during implementation.
+- **Decoders currently cover only DPT1–5** and `KnxTelegramData` only holds
+  dpt1–5. Extend to the DPT set the value types expose.
+- **Host-testability (LOW priority, optional):** keep the *pure* protocol math
+  (framing, checksum, DPT codecs, GA packing) free of `<Arduino.h>` so it can
+  compile + unit-test on a PC in CI. This is a quality multiplier, not required;
+  it would have caught the `DimmIncrement` bug in a 5-line test. Not for
+  portability — Arduino is the portability layer.
+
+## 10. Open forks still to decide at implementation time
+
+1. **`KnxValue` internals:** tagged struct with a union vs. small-buffer variant —
+   pick the leanest that stays no-heap on AVR.
+2. **Intent class set for v1:** confirm the list (Light, DimmLight, Blind, +?).
+3. **Retry/confirmation policy** on `L_Data.con` failure (count, backoff).
+4. **`MAX_OBJECTS`** sizing.
+
+## 11. Note: CLAUDE.md migration section is now partly stale
+
+`CLAUDE.md` → "Planned migration: TP-UART2 → STKNX" assumes bit-banging the STKNX
+on the main MCU with hardware-timer ISRs (13 µs tick, per-platform `#ifdef`). That
+is superseded: **an external ATTiny handles timing and presents a TP-UART-like
+UART interface.** Update that section when convenient (not required for this plan).

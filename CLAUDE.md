@@ -94,14 +94,25 @@ Define per-module to enable `Serial.print` output:
 
 No debug output is active in production builds.
 
-## Planned migration: TP-UART2 → STKNX
+## Physical layer: STKNX behind an ATTiny co-processor
 
-The Siemens TP-UART2 transceiver will be replaced by the ST STKNX, which is a **pure physical-layer** chip (GPIO, not UART). This is part of the transition to a cross-platform Arduino KNX library.
+The Siemens TP-UART2 transceiver is replaced by the ST STKNX, a **pure
+physical-layer** chip (GPIO, not UART). Rather than bit-bang the STKNX on the main
+MCU, an **external ATTiny co-processor** handles all bit-level timing and presents
+a **TP-UART-like UART interface** to the main MCU.
 
 Key consequences:
-- `KNX_TPUART2` will be replaced by a new `KNX_STKNX` driver.
-- Interface changes from `HardwareSerial` to GPIO bit-bang at 9600 baud (104 µs/bit).
-- All layers above `KNX_TPUART2` (`KNX_Telegram`, `KNX`, `main.cpp`) survive unchanged.
-- Bit timing driven by **hardware timer interrupts** (not `delayMicroseconds`) to allow collision detection during TX and to remain reliable when WiFi/MQTT/Matter stacks are active.
-- Timer HAL will use `#ifdef` guards per platform: AVR (Timer1 CTC), ESP32 (`timerBegin`), RP2040 (`add_repeating_timer_us`), SAMD (TC3).
-- Fixed tick period: **13 µs** (8 ticks per KNX bit). Dominant '0' = 3 ticks HIGH + 5 ticks LOW. Recessive '1' = 8 ticks LOW.
+- `KNX_TPUART2` is replaced by a new driver, but the driver still talks **UART**
+  to the ATTiny — not GPIO bit-bang on the main MCU.
+- **Bit timing, collision detection, and STKNX GPIO drive live on the ATTiny.**
+  The main MCU never runs timing-critical ISRs for KNX, so the library stays
+  reliable when WiFi/MQTT/Matter stacks share the main core.
+- All layers above the physical driver (`KNX_Telegram`, `KNX`, application) keep a
+  UART-shaped link-layer interface (send frame / poll for events / TX
+  confirmation), so the swap is contained to the driver.
+- The ATTiny is expected to return a **transmit confirmation** (TP-UART-style
+  `L_Data.con`); the driver must surface real send success/failure instead of
+  hard-returning `true` (see `PLAN.md` §9).
+
+> The broader library redesign (Adafruit-style API, `Dpt`/`KnxValue` value types,
+> `KnxObject` + intent classes, unified RX registry) is tracked in **`PLAN.md`**.
