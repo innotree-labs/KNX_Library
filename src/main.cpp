@@ -17,8 +17,7 @@
 
 //---- Libraries ----
 #include <Arduino.h>
-#include <KNX_Driver.h>    // concrete ATTiny / TP-UART bus driver
-#include <KnxObjects.h>    // coordinator (KNX) + value currency (KnxValue) + intent objects
+#include <KNX.h>           // the whole library: driver + coordinator + values + intent objects
 
 //---- Configuration ----
 #define BAUDRATE_SERIAL 115200

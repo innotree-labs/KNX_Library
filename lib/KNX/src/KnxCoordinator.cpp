@@ -1,12 +1,12 @@
 /**
- * @name KNX.cpp
- * @date 16.07.2026
+ * @name KnxCoordinator.cpp
+ * @date 18.07.2026
  * @authors Florian Wiesner
- * @details See KNX.h.
+ * @details See KnxCoordinator.h.
 */
 
 //----Libraries----
-#include "KNX.h"
+#include "KnxCoordinator.h"
 
 //---- Sending ----
 

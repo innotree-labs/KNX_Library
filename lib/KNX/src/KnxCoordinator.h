@@ -1,7 +1,7 @@
 #pragma once
 /**
- * @name KNX.h
- * @date 16.07.2026
+ * @name KnxCoordinator.h
+ * @date 18.07.2026
  * @authors Florian Wiesner
  * @details High-level KNX coordinator. Owns an injected link-layer driver (IKnxDriver),
  *          assembles outgoing telegrams from a KnxValue via KnxFrame, and dispatches incoming

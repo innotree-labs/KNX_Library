@@ -20,7 +20,7 @@
 #include <cstdint>
 
 //---- Custom module headers ----
-#include "KNX.h"          // coordinator: send() + register/unregister
+#include "KnxCoordinator.h"   // coordinator: send() + register/unregister
 #include "KnxValue.h"     // value currency + Dpt*() factories
 #include "KnxCodec.h"     // decode()/isInline6()
 

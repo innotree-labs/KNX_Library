@@ -1,7 +1,7 @@
 {
   "name": "KNX_Object",
   "version": "0.1.0",
-  "description": "Stateful KNX objects (PLAN §5-7): KnxObject : IKnxReceiver holds a GA/DPT/cached value/callback, self-registers in the coordinator's intrusive registry, and decodes incoming telegrams with its own DPT. Intent subclasses (KnxLight, KnxDimmLight, KnxBlind, KnxTemperature, ...) hide the DPT behind intent methods. Header-only so the LDF pulls no Arduino-bound translation unit into native tests.",
+  "description": "Stateful KNX objects (PLAN §5-7) plus the public KNX.h facade. KnxObject : IKnxReceiver holds a GA/DPT/cached value/callback, self-registers in the coordinator's intrusive registry, and decodes incoming telegrams with its own DPT. Intent subclasses (KnxLight, KnxDimmLight, KnxBlind, KnxTemperature, ...) hide the DPT. KNX.h is the single user include: it sits atop the DAG and pulls the driver + coordinator + values + all objects (a sketch writes only #include <KNX.h>). Header-only so the LDF pulls no Arduino-bound translation unit into native tests.",
   "frameworks": "*",
   "platforms": "*",
   "dependencies": {

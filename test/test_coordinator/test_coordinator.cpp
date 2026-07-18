@@ -10,7 +10,7 @@
 
 #include <unity.h>
 #include <cstring>
-#include "KNX.h"
+#include "KnxCoordinator.h"
 #include "KnxFrame.h"
 #include "KnxCodec.h"
 
