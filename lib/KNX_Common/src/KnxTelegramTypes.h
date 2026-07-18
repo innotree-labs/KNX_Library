@@ -1,10 +1,11 @@
 #pragma once
 /**
  * @name KnxTelegramTypes.h
- * @date 16.07.2026
+ * @date 18.07.2026
  * @authors Florian Wiesner
- * @details Passive value types describing a parsed telegram and a decoded bus event.
- *          These carry no behaviour; the coordinator and telegram codec populate them.
+ * @details Passive value type describing a parsed telegram. It carries no behaviour; the
+ *          telegram codec (KnxFrame) populates it and the coordinator dispatches it to the
+ *          matching IKnxReceiver, which decodes the payload with its own DPT (PLAN §6).
 */
 
 //---- Libraries ----
@@ -12,44 +13,16 @@
 #include "KnxEnums.h"
 #include "KnxAddress.h"
 
-// Decoded native payload for the low DPTs the legacy decoder path understands.
-// Superseded as the send-side currency by KnxValue (KNX_Value); retained for the
-// existing receive path until the coordinator is rebuilt on KnxObject.
-union KnxTelegramData {
-	bool dpt1;
-	uint8_t dpt2;
-	struct { bool direction; uint8_t step; } dpt3;
-	char dpt4;
-	struct { uint8_t raw; float percent; } dpt5;
-};
-
+// A parsed L_Data standard frame: addressing + service metadata + a pointer to the raw APDU
+// payload. Value decoding is deferred to the receiver's DPT, so no decoded union lives here.
 struct ParsedTelegram {
 	PhysicalAddress source{};
 	GroupAddress target{};
 	GroupValueType type;
 	KNX_DPT dpt = KNX_DPT::UNKNOWN;
 	KNX_Priority priority{};
-	const uint8_t* payload = nullptr;
+	const uint8_t* payload = nullptr;   // multi-octet APDU payload (nullptr for inline-6 DPTs)
 	uint8_t payloadLength  = 0;
-	uint8_t inline6Data    = 0;
+	uint8_t inline6Data    = 0;         // 6-bit APDU data for the inline DPTs (DPT1/2/3)
 	bool _isInline6        = false;
-	bool decodedValid      = false;
-	KnxTelegramData decoded;
-};
-
-struct KnxEvent {
-	PhysicalAddress source;
-	GroupAddress target;
-	GroupValueType type;
-	KNX_DPT dpt;
-	KnxTelegramData value;
-};
-
-// Legacy binding currency — removed once the coordinator moves to the intrusive
-// IKnxReceiver registry (PLAN §7). Kept so the current KNX::bind path still builds.
-using KNX_Callback = void (*)(const KnxEvent& event);
-struct KNX_Binding {
-	GroupAddress ga;
-	KNX_DPT dpt;
-	KNX_Callback callback;
 };

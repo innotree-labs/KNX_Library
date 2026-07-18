@@ -6,6 +6,6 @@
   "platforms": "*",
   "dependencies": {
     "KNX_Common": "*",
-    "KNX_Frame": "*"
+    "KNX_Telegram": "*"
   }
 }

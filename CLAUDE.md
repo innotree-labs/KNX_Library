@@ -2,9 +2,12 @@
 
 ## Project overview
 
-PlatformIO / Arduino project running on a **Seeed XIAO ESP32-C6**. This is the firmware for a KNX wall controller: it reads capacitive touch pads, drives KNX bus telegrams for light switching and dimming, shows status on an OLED display, and feeds back incoming KNX events to an RGB backlight.
-
-The codebase also serves as the prototype for a future **cross-platform Arduino KNX library** (see migration notes below).
+PlatformIO / Arduino project running on a **Seeed XIAO ESP32-C6**. The repository is now
+primarily an **Adafruit-style cross-platform Arduino KNX library** (the redesign tracked in
+`PLAN.md`), with `src/main.cpp` as a showcase sketch demonstrating its use. The original target
+is a KNX wall controller (capacitive touch pads, OLED, RGB backlight); those sensor/display
+drivers are not part of the library surface and the thesis button layer now lives under
+`examples/`.
 
 ## Build system
 
@@ -20,22 +23,37 @@ All custom code lives under `lib/`. Third-party dependencies are declared in `pl
 
 ## Architecture
 
-Strict layered design — dependencies only flow downward:
+Strict layered design — dependencies only flow downward, acyclic (PLAN §12):
 
 ```
-src/main.cpp              ← application: wires everything together
-lib/KNX/                  ← high-level KNX coordinator (bind, send, handleUART)
-lib/KNX_Telegram/         ← telegram encode / decode (DPT1–DPT19)
-lib/KNX_TPUART2/          ← hardware driver: UART ↔ Siemens TP-UART2 transceiver
-lib/KNX_Defines/          ← shared types, enums, structs (header-only)
-lib/KNX_Device/           ← button abstractions (SingleButton, TwoButtonDimming, …)
-lib/TouchSensor/          ← MPR121 capacitive touch (4-pad, I2C 0x5A)
-lib/Backlight/            ← WS2812B NeoPixel strip (pin D3, 2 pixels)
-lib/Display/              ← SSD1306 OLED 128×64 (I2C 0x3D)
-lib/TemperatureSensor/    ← SHTC3 temperature + humidity (I2C)
+src/main.cpp        ← showcase sketch: wires the stack + drives intent objects
+lib/KNX_Object/     ← KnxObject : IKnxReceiver + intent classes (KnxLight, KnxDimmLight,
+                      KnxRGB, KnxBlind, KnxTemperature, …) grouped by domain header;
+                      KnxObjects.h is the one-include umbrella. Header-only.
+lib/KNX/            ← coordinator: send(ga, KnxValue), intrusive IKnxReceiver registry,
+                      handleUART; owns an injected IKnxDriver*
+lib/KNX_Driver/     ← concrete ATTiny / TP-UART UART driver : IKnxDriver (target-only)
+lib/KNX_Telegram/   ← stateless L_Data framing + reassembler (KnxFrame, KnxReassembler);
+                      Arduino-free, host-tested
+lib/KNX_Value/      ← value currency: KnxValue tagged union + symmetric KnxCodec. Pure
+lib/KNX_Common/     ← shared types + contracts: KnxEnums, KnxAddress, KnxTelegramTypes,
+                      KnxInterfaces (IKnxDriver / IKnxReceiver). Header-only
+examples/KNX_Device/← thesis button state machines (SingleButton/TwoButtonDimming, …);
+                      NOT in the build, NOT part of the library surface (PLAN §12)
 ```
 
-No global singletons. Dependencies are injected via `Init()` or constructor pointers.
+Dependency flow: `KNX_Object → KNX → {KNX_Telegram, KNX_Value, KNX_Common}`,
+`KNX_Driver → {KNX_Telegram, KNX_Common}`, `KNX_Telegram → KNX_Value → KNX_Common`.
+Interfaces (`IKnxDriver`, `IKnxReceiver`) live in `KNX_Common` below their consumers, so the
+coordinator never includes the concrete driver or object headers — no cycle.
+
+No global singletons. Dependencies are injected by constructor pointer/reference.
+
+**User include:** a sketch needs only `#include <KNX_Driver.h>` + `#include <KnxObjects.h>`
+(the umbrella pulls in the coordinator, the value currency, and every intent class).
+
+**Testing:** `pio test -e native` runs the host Unity suite (codec, framing, reassembler,
+coordinator, objects) against the Arduino-free layers; `pio run` builds the firmware.
 
 ## Hardware pin map (XIAO ESP32-C6)
 
@@ -50,46 +68,37 @@ No global singletons. Dependencies are injected via `Init()` or constructor poin
 | I2C SDA | SDA | Shared: MPR121, SSD1306, SHTC3 |
 | I2C SCL | SCL | Shared bus |
 
-## KNX group addresses in use
+## KNX group addresses in the showcase (`src/main.cpp`)
 
 | Address | DPT | Direction | Purpose |
 |---|---|---|---|
-| 0/0/1 | DPT3 | OUT | Dimming (incremental) |
-| 0/1/1 | DPT1 | OUT | Light switching |
-| 0/3/0 | DPT1 | IN  | Light status feedback → backlight |
+| 0/1/1 | DPT1 | OUT | `kitchen` light switching |
+| 0/3/0 | DPT1 | IN  | `kitchen` status feedback → onUpdate callback |
+| 0/1/2 | DPT1 | OUT | `lamp` switching |
+| 0/0/1 | DPT3 | OUT | `lamp` incremental dimming |
+| 0/4/2 | DPT9 | IN/OUT | `roomTemp` temperature |
 
+Group addresses are hardcoded in the sketch (no ETS) — the Adafruit-style trade-off (PLAN §1).
 Physical address of this device: **1.1.5**
 
-## Current wiring state
+## Showcase sketch (`src/main.cpp`)
 
-**Active in main loop:**
-- `touch.update()` → `rocker1_TwoButtonDimming.update(Top_Left, Top_Right)` → KNX send
-- `knx.handleUART()` → parsed telegram → `onStatus_LightA()` → backlight color
+Demonstrates the three usage tiers (PLAN §3):
+- **Intent objects** — `KnxLight kitchen(knx, "0/1/1", "0/3/0")`; `.on()/.off()/.toggle()`
+  flips relative to the cached status-fed state; `.onUpdate([](bool){…})` for feedback.
+- **Value objects** — `KnxTemperature roomTemp(knx, "0/4/2")`; `.set(float)` / `.onUpdate`.
+- **Stateless send** — `knx.send("0/4/2", Dpt9(21.5f))` for a one-off to any address (no RX).
 
-**Implemented but not yet wired into main.cpp:**
-- `TemperatureSensor` — hardware ready, never instantiated
-- `Display` — fully implemented (temp, humidity), never instantiated
-- `TouchSensor` Bottom_Left / Bottom_Right pads — read but unused
-
-## KNX_Device class hierarchy
-
-```
-SingleButtonOperation (abstract)
-└── TwoButtonOperation (abstract)
-    ├── TwoButtonDimming   ← used in main.cpp (rocker1)
-    └── TwoButtonSwitching
-SingleButtonSwitching
-SingleTestButton / TwoTestButton  ← serial debug helpers
-```
-
-Short press → switch (DPT1). Long press / hold → dim (DPT3). Hold release → stop.
+Objects are declared at global scope: they self-register into the coordinator's receiver
+registry on construction and must outlive it (PLAN §6). The loop pumps `knx.handleUART()`,
+checks `knx.monitorTPUART()` for bus faults, and drives the light from two demo buttons.
 
 ## Debug flags
 
 Define per-module to enable `Serial.print` output:
 
 ```cpp
-#define DEBUG           // KNX_TPUART2 verbose logging
+#define DEBUG           // KNX_Driver verbose logging
 ```
 
 No debug output is active in production builds.

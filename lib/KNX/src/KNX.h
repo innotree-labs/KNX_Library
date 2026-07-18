@@ -7,8 +7,8 @@
  *          assembles outgoing telegrams from a KnxValue via KnxFrame, and dispatches incoming
  *          telegrams to an intrusive list of IKnxReceiver objects that decode with their own
  *          DPT (PLAN §5–7). The core is Arduino-free and depends only on the driver interface,
- *          so it is host-testable with a mock driver; the String conveniences and the legacy
- *          KnxEvent bind path are transitional and confined to #ifdef ARDUINO.
+ *          so it is host-testable with a mock driver; the String-based physical-address ctor and
+ *          the stateless String send() tier are Arduino conveniences confined to #ifdef ARDUINO.
 */
 
 //---- Standard / platform libraries ----
@@ -102,7 +102,7 @@ class KNX {
 		*/
 		PhysicalAddress address(void) const { return physicalAddress; }
 
-// ================= Transitional Arduino conveniences (migrate to KnxObject) =================
+// ================= Arduino String conveniences =================
 #ifdef ARDUINO
 	public:
 		/**
@@ -111,30 +111,10 @@ class KNX {
 		KNX(IKnxDriver* driver, String physicalAddress)
 			: p_driver(driver), physicalAddress(physicalAddressFromString(physicalAddress)) {}
 
-		// Stateless one-liners over send() — thin sugar kept so the legacy device/app layer
-		// builds until it is rebuilt on KnxObject (PLAN §8).
-		bool send(String ga, const KnxValue& value)                { return send(packedGroupAddressFromString(ga), value); }
-		bool switchLight(String ga, bool state)                    { return send(ga, Dpt1(state)); }
-		bool dimLightInterval(String ga, bool dir, DimmIncrement i) { return send(ga, Dpt3(dir, (uint8_t)i)); }
-		bool dimLightValue(String ga, uint8_t percent)             { return send(ga, Dpt5((uint8_t)map(percent, 0, 100, 0, 255))); }
-		bool blindOpenClose(String ga, bool direction)             { return send(ga, Dpt1(direction)); }
-		bool blindStopStep(String ga, bool step)                   { return send(ga, Dpt1(step)); }
-		bool blindPositionValue(String ga, uint8_t position)       { return send(ga, Dpt5((uint8_t)map(position, 0, 100, 0, 255))); }
-		bool sendTemperature(String ga, float temperature)         { return send(ga, Dpt9(temperature)); }
-		bool sendHumidity(String ga, float humidity)               { return send(ga, Dpt9(humidity)); }
-
 		/**
-		 * @brief Legacy binding: registers a KnxEvent callback for a group address / DPT.
-		 * @return true if the binding was stored.
+		 * @brief Stateless send tier (PLAN §3): encode a value and transmit it to a group address
+		 *        given as a "main/middle/sub" string. No receive — use a KnxObject for that.
 		*/
-		bool bind(String gaStr, KNX_DPT dpt, KNX_Callback cb);
-
-	private:
-		//---- Legacy KnxEvent bind path (deleted with the device-layer rewrite) ----
-		static constexpr uint8_t MAX_BINDINGS = 8;
-		KNX_Binding legacyBindings[MAX_BINDINGS];
-		uint8_t     legacyBindingCount = 0;
-		// Decodes and fires any legacy bindings matching a parsed telegram.
-		void dispatchLegacy(const ParsedTelegram& telegram);
+		bool send(String ga, const KnxValue& value) { return send(packedGroupAddressFromString(ga), value); }
 #endif // ARDUINO
 };

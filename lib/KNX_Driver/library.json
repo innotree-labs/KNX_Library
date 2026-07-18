@@ -6,6 +6,6 @@
   "platforms": "espressif32",
   "dependencies": {
     "KNX_Common": "*",
-    "KNX_Frame": "*"
+    "KNX_Telegram": "*"
   }
 }
