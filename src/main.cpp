@@ -38,6 +38,13 @@ KnxTemperature roomTemp(knx, "0/4/2");                // publish + read a temper
 static bool lastToggleBtn = HIGH;
 static bool lastBrightBtn = HIGH;
 
+//---- Callback handlers: declared here, defined below loop() ----
+// Plain functions, not lambdas — nothing is captured, so a function pointer is all the
+// library ever needs (no heap, AVR-safe). In a .ino sketch these prototypes are generated
+// for you; in a .cpp they are required because the bodies live below their use in setup().
+void onKitchenChanged(bool on);
+void onTemperatureChanged(float celsius);
+
 void setup() {
 	Serial.begin(BAUDRATE_SERIAL);
 	pinMode(PIN_BTN_TOGGLE, INPUT_PULLUP);
@@ -46,15 +53,9 @@ void setup() {
 	knx.begin();
 
 	// RX: react to bus feedback with typed callbacks (no DPT, no manual decode).
-	// A non-capturing lambda converts to a plain function pointer — no heap, AVR-safe.
-	kitchen.onUpdate([](bool on) {
-		Serial.printf("[kitchen] bus says the light is now %s\n", on ? "ON" : "OFF");
-		// drive your RGB backlight / OLED here
-	});
-
-	roomTemp.onUpdate([](float celsius) {
-		Serial.printf("[roomTemp] %.1f C\n", celsius);
-	});
+	// One line per binding — setup() reads as the wiring manifest for this device.
+	kitchen.onUpdate(onKitchenChanged);
+	roomTemp.onUpdate(onTemperatureChanged);
 }
 
 void loop() {
@@ -81,4 +82,17 @@ void loop() {
 
 	// 3rd tier for reference: a one-off value to any address, no object needed.
 	// knx.send("0/4/2", Dpt9(21.5f));
+}
+
+//---- Handlers: run when a matching telegram arrives during knx.loop() ----
+
+// Status feedback for the kitchen light (GA 0/3/0), already decoded to a bool.
+void onKitchenChanged(bool on) {
+	Serial.printf("[kitchen] bus says the light is now %s\n", on ? "ON" : "OFF");
+	// drive your RGB backlight / OLED here
+}
+
+// Temperature published on GA 0/4/2, already decoded from DPT9 to a float.
+void onTemperatureChanged(float celsius) {
+	Serial.printf("[roomTemp] %.1f C\n", celsius);
 }

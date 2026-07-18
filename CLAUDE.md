@@ -96,13 +96,20 @@ Physical address of this device: **1.1.5**
 
 Demonstrates the three usage tiers (PLAN §3):
 - **Intent objects** — `KnxLight kitchen(knx, "0/1/1", "0/3/0")`; `.on()/.off()/.toggle()`
-  flips relative to the cached status-fed state; `.onUpdate([](bool){…})` for feedback.
+  flips relative to the cached status-fed state; `.onUpdate(onKitchenChanged)` for feedback.
 - **Value objects** — `KnxTemperature roomTemp(knx, "0/4/2")`; `.set(float)` / `.onUpdate`.
 - **Stateless send** — `knx.send("0/4/2", Dpt9(21.5f))` for a one-off to any address (no RX).
 
 Objects are declared at global scope: they self-register into the coordinator's receiver
 registry on construction and must outlive it (PLAN §6). The Arduino `loop()` calls `knx.loop()`
 to service the stack (parse incoming telegrams, fire callbacks) and drives the light from buttons.
+
+**Callback style in the showcase:** handlers are **named free functions**, prototyped above
+`setup()` and defined below `loop()` (the thesis layout), so `setup()` stays a flat wiring
+manifest — one line per binding, no handler bodies inline. `onUpdate` takes a plain
+`void(*)(native)`, so a non-capturing lambda works identically; the named form is the idiom the
+example teaches because it matches `attachInterrupt(pin, handler, …)` and names the intent. The
+prototypes are only needed because this is a `.cpp` — a user's `.ino` gets them generated.
 
 ## Debug flags
 
