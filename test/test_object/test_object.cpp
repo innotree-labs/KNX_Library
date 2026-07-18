@@ -65,7 +65,7 @@ static const PhysicalAddress SELF = { 1, 1, 5 };
 static bool lastSentBool(const MockDriver& mock) {
 	ParsedTelegram tg;
 	KnxFrame::parse(mock.lastSent, mock.lastLen, tg);
-	return KnxCodec::decode(KNX_DPT::DPT1, &tg.inline6Data, 1).asBool();
+	return KnxCodec::decode(KnxDpt::DPT1, &tg.inline6Data, 1).asBool();
 }
 
 //---- Callback capture (plain function pointers, so state lives in file-scope globals) ----
@@ -211,7 +211,7 @@ void test_percent_scaling_roundtrip(void) {
 	TEST_ASSERT_TRUE(pct.set(50));
 	ParsedTelegram tg;
 	KnxFrame::parse(mock.lastSent, mock.lastLen, tg);
-	uint8_t raw = KnxCodec::decode(KNX_DPT::DPT5, tg.payload, tg.payloadLength).asU8();
+	uint8_t raw = KnxCodec::decode(KnxDpt::DPT5, tg.payload, tg.payloadLength).asU8();
 	TEST_ASSERT_UINT8_WITHIN(1, 128, raw);
 
 	// Receiving raw 255 should surface as 100 %.

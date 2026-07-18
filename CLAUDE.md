@@ -27,33 +27,34 @@ Strict layered design — dependencies only flow downward, acyclic (PLAN §12):
 
 ```
 src/main.cpp        ← showcase sketch: wires the stack + drives intent objects
-lib/KNX_Object/     ← KnxObject : IKnxReceiver + intent classes (KnxLight, KnxDimmLight,
+lib/KnxObject/      ← KnxObject : IKnxReceiver + intent classes (KnxLight, KnxDimmLight,
                       KnxRGB, KnxBlind, KnxTemperature, …) grouped by domain header;
-                      KNX.h is the public one-line facade (top of the DAG). Header-only.
-lib/KNX/            ← DI core class KnxCoordinator (KnxCoordinator.h): send(ga, KnxValue),
+                      Konnextor.h is the public one-line facade (top of the DAG). Header-only.
+lib/KnxCoordinator/ ← DI core class KnxCoordinator (KnxCoordinator.h): send(ga, KnxValue),
                       intrusive IKnxReceiver registry, loop(); holds an injected IKnxDriver*
-                      (the user-facing KNX node subclass that owns the driver is in KNX.h)
-lib/KNX_Driver/     ← concrete ATTiny / TP-UART UART driver : IKnxDriver (target-only)
-lib/KNX_Telegram/   ← stateless L_Data framing + reassembler (KnxFrame, KnxReassembler);
+                      (the user-facing Konnextor node subclass owning the driver is in Konnextor.h)
+lib/KnxDriver/      ← concrete ATTiny / TP-UART UART driver : IKnxDriver (target-only)
+lib/KnxTelegram/    ← stateless L_Data framing + reassembler (KnxFrame, KnxReassembler);
                       Arduino-free, host-tested
-lib/KNX_Value/      ← value currency: KnxValue tagged union + symmetric KnxCodec. Pure
-lib/KNX_Common/     ← shared types + contracts: KnxEnums, KnxAddress, KnxTelegramTypes,
+lib/KnxValue/       ← value currency: KnxValue tagged union + symmetric KnxCodec. Pure
+lib/KnxCommon/      ← shared types + contracts: KnxEnums, KnxAddress, KnxTelegramTypes,
                       KnxInterfaces (IKnxDriver / IKnxReceiver). Header-only
 examples/KNX_Device/← thesis button state machines (SingleButton/TwoButtonDimming, …);
                       NOT in the build, NOT part of the library surface (PLAN §12)
 ```
 
-Dependency flow: `KNX_Object → KNX → {KNX_Telegram, KNX_Value, KNX_Common}`,
-`KNX_Driver → {KNX_Telegram, KNX_Common}`, `KNX_Telegram → KNX_Value → KNX_Common`.
-Interfaces (`IKnxDriver`, `IKnxReceiver`) live in `KNX_Common` below their consumers, so the
+Dependency flow: `KnxObject → KnxCoordinator → {KnxTelegram, KnxValue, KnxCommon}`,
+`KnxDriver → {KnxTelegram, KnxCommon}`, `KnxTelegram → KnxValue → KnxCommon`.
+Interfaces (`IKnxDriver`, `IKnxReceiver`) live in `KnxCommon` below their consumers, so the
 coordinator never includes the concrete driver or object headers — no cycle.
 
 No global singletons. Dependencies are injected by constructor pointer/reference.
 
-**User include & construction:** a sketch needs only `#include <KNX.h>` and `KNX knx("1.1.5");`.
-`KNX.h` (in `KNX_Object`, atop the DAG) pulls in the driver, the coordinator core, the value
-currency, and every intent class, then defines the user-facing **`KNX` node class** — a thin
-Arduino subclass of `KnxCoordinator` that *owns* a `KNX_Driver` and is built from the physical
+**User include & construction:** a sketch needs only `#include <Konnextor.h>` and
+`Konnextor knx("1.1.5");`. `Konnextor.h` (in `KnxObject`, atop the DAG) pulls in the driver, the
+coordinator core, the value currency, and every intent class, then defines the user-facing
+**`Konnextor` node class** — a thin
+Arduino subclass of `KnxCoordinator` that *owns* a `KnxDriver` and is built from the physical
 address, so the user never instantiates or injects a driver (address typed once). The
 dependency-injection **core is `KnxCoordinator`** (`KnxCoordinator.h`): Arduino-free, host-testable
 with a mock driver, and the type intent objects reference (`KnxCoordinator&`). Advanced users can
@@ -103,7 +104,7 @@ to service the stack (parse incoming telegrams, fire callbacks) and drives the l
 Define per-module to enable `Serial.print` output:
 
 ```cpp
-#define DEBUG           // KNX_Driver verbose logging
+#define DEBUG           // KnxDriver verbose logging
 ```
 
 No debug output is active in production builds.
@@ -121,7 +122,7 @@ Key consequences:
 - **Bit timing, collision detection, and STKNX GPIO drive live on the ATTiny.**
   The main MCU never runs timing-critical ISRs for KNX, so the library stays
   reliable when WiFi/MQTT/Matter stacks share the main core.
-- All layers above the physical driver (`KNX_Telegram`, `KNX`, application) keep a
+- All layers above the physical driver (`KnxTelegram`, `KnxCoordinator`, application) keep a
   UART-shaped link-layer interface (send frame / poll for events / TX
   confirmation), so the swap is contained to the driver.
 - The ATTiny is expected to return a **transmit confirmation** (TP-UART-style
@@ -131,55 +132,3 @@ Key consequences:
 > The broader library redesign (Adafruit-style API, `Dpt`/`KnxValue` value types,
 > `KnxObject` + intent classes, unified RX registry) is tracked in **`PLAN.md`**.
 
-## IN-PROGRESS REFACTOR: unified `Knx` naming + `Konnextor` facade
-
-**Status: PLANNED — not started.** Delete this whole section once step 10 is done and committed.
-
-**Goal.** Adopt ONE naming convention across the library: PascalCase **`Knx…`** for every
-library folder, header file, class, and enum *type*. Drop the `KNX_` SCREAMING prefix from all
-*identifiers*. The single user-facing facade class is renamed to the product name
-**`Konnextor`**, so a sketch reads:
-
-```cpp
-#include <Konnextor.h>
-Konnextor knx("1.1.5");
-```
-
-**Scope boundaries (do NOT over-reach):**
-- The protocol word "KNX" stays as-is in **prose / doc-comments** ("the KNX bus", "a KNX
-  telegram"). Only the `KNX` *class*, the `KNX.h` header, and the `<KNX.h>` include change.
-- `#define` macros stay SCREAMING_SNAKE (correct per the C++ style guide) — leave
-  `KNX_DRIVER_RX/TX/RESN/BAUD` untouched.
-- Enum *type names* change (`KNX_DPT`→`KnxDpt`, `KNX_Priority`→`KnxPriority`); their
-  *enumerators* (`DPT1`, `DPT232`, `System`, `Normal`, …) do NOT.
-- Already-correct `Knx…` names (`KnxValue`, `KnxObject`, `KnxCoordinator`, the `KnxFrame`/
-  `KnxCodec` namespaces, …) are unchanged.
-- **File placement / library merge (point 4) is DEFERRED** — this pass only renames; it does
-  not move the facade out of the objects lib or merge libraries.
-
-**Verify after the bulk edits (and before commit):** `~/.platformio/penv/bin/pio run`
-(firmware) AND `~/.platformio/penv/bin/pio test -e native` must be green (**51/51** tests).
-
-**Steps (checklist):**
-- [ ] 1. Delete dead `lib/KNX_Common/src/KNX_Defines.h` (unused back-compat shim; old includers gone).
-- [ ] 2. Rename headers (`git mv`): `KNX_Common.h`→`KnxCommon.h`, `KNX_Driver.h`→`KnxDriver.h`,
-      `KNX_Object/src/KNX.h`→`Konnextor.h`.
-- [ ] 3. Rename lib folders (`git mv`): `KNX_Common`→`KnxCommon`, `KNX_Value`→`KnxValue`,
-      `KNX_Telegram`→`KnxTelegram`, `KNX_Driver`→`KnxDriver`, `KNX_Object`→`KnxObject`,
-      `KNX`→`KnxCoordinator`.
-- [ ] 4. Every `library.json`: update `"name"` + `"dependencies"` to the new folder names
-      (`KNX_Common`→`KnxCommon`, etc.).
-- [ ] 5. Enum type names in `KnxEnums.h` and ALL usages (~16 files for `KNX_DPT`, ~4 for
-      `KNX_Priority`): `KNX_DPT`→`KnxDpt`, `KNX_Priority`→`KnxPriority`.
-- [ ] 6. Class renames: `KNX_Driver`→`KnxDriver` (in `KnxDriver.h/.cpp`), `KNX`→`Konnextor`
-      (facade in `Konnextor.h`).
-- [ ] 7. Update includes: `"KNX_Driver.h"`→`"KnxDriver.h"` (in `KnxDriver.cpp` + `Konnextor.h`);
-      `src/main.cpp` `<KNX.h>`→`<Konnextor.h>`. (`KNX_Common.h`/`KNX_Defines.h` have no includers.)
-- [ ] 8. `src/main.cpp`: `KNX knx(...)`→`Konnextor knx(...)`.
-- [ ] 9. Docs: refresh this file's Architecture lib-tree + "User include" wording, and `PLAN.md`
-      §12 (tree / dependency arrows / facade text) to the new names.
-- [ ] 10. Verify firmware + 51/51 native green → commit → delete this section.
-
-**Tip:** the `KNX_DPT`/`KNX_Priority` and folder/name swaps are safe with `perl -pi -e` over the
-file list from `grep -rl`; do the class `KNX`→`Konnextor` rename carefully (word-boundary,
-identifier only — never the protocol word in comments).

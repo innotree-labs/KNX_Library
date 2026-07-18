@@ -17,7 +17,7 @@
 
 //---- Libraries ----
 #include <Arduino.h>
-#include <KNX.h>           // the whole library: driver + coordinator + values + intent objects
+#include <Konnextor.h>     // the whole library: driver + coordinator + values + intent objects
 
 //---- Configuration ----
 #define BAUDRATE_SERIAL 115200
@@ -27,7 +27,7 @@
 #define PIN_BTN_BRIGHT  D9          // momentary button: dim the lamp brighter
 
 //---- KNX node: one object, address typed once; the bus driver is owned internally ----
-KNX knx(PHYS_ADDR);
+Konnextor knx(PHYS_ADDR);
 
 //---- Objects: (node, command GA[, status GA]) — declared once, live forever ----
 KnxLight       kitchen(knx, "0/1/1", "0/3/0");        // sends on 0/1/1, listens on 0/3/0

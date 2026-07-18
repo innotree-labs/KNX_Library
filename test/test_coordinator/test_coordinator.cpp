@@ -63,7 +63,7 @@ class TestReceiver : public IKnxReceiver {
 		bool matches(uint16_t ga) const override { return ga == listenGa; }
 		void receive(const ParsedTelegram& tg) override {
 			receiveCount++;
-			lastBool = KnxCodec::decode(KNX_DPT::DPT1, &tg.inline6Data, 1).asBool();
+			lastBool = KnxCodec::decode(KnxDpt::DPT1, &tg.inline6Data, 1).asBool();
 		}
 };
 

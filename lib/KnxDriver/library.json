@@ -1,0 +1,11 @@
+{
+  "name": "KnxDriver",
+  "version": "0.1.0",
+  "description": "Concrete ATTiny/TP-UART2 link-layer driver implementing IKnxDriver: UART handshake, per-byte send with real L_Data.con, RX frame reassembly, fault monitoring. Arduino/target only.",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "dependencies": {
+    "KnxCommon": "*",
+    "KnxTelegram": "*"
+  }
+}

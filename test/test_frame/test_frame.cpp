@@ -56,7 +56,7 @@ void test_roundtrip_dpt3(void) {
 	TEST_ASSERT_EQUAL(GroupValueType::Write, tg.type);
 
 	// Receiver-side decode with the known DPT.
-	DptDim d = KnxCodec::decode(KNX_DPT::DPT3, &tg.inline6Data, 1).asDim();
+	DptDim d = KnxCodec::decode(KnxDpt::DPT3, &tg.inline6Data, 1).asDim();
 	TEST_ASSERT_TRUE(d.increase);
 	TEST_ASSERT_EQUAL_UINT8(5, d.stepcode);
 }
@@ -74,7 +74,7 @@ void test_roundtrip_dpt9(void) {
 	TEST_ASSERT_NOT_NULL(tg.payload);
 	TEST_ASSERT_TRUE(gaEqual(GroupAddress{ 0, 4, 2 }, tg.target));
 
-	float back = KnxCodec::decode(KNX_DPT::DPT9, tg.payload, tg.payloadLength).asFloat();
+	float back = KnxCodec::decode(KnxDpt::DPT9, tg.payload, tg.payloadLength).asFloat();
 	TEST_ASSERT_FLOAT_WITHIN(0.01f, 21.5f, back);
 }
 
@@ -90,7 +90,7 @@ void test_roundtrip_dpt19(void) {
 	ParsedTelegram tg;
 	TEST_ASSERT_TRUE(KnxFrame::parse(frame, len, tg));
 	TEST_ASSERT_EQUAL_UINT8(8, tg.payloadLength);
-	DptDateTime r = KnxCodec::decode(KNX_DPT::DPT19, tg.payload, tg.payloadLength).asDateTime();
+	DptDateTime r = KnxCodec::decode(KnxDpt::DPT19, tg.payload, tg.payloadLength).asDateTime();
 	TEST_ASSERT_EQUAL_UINT16(2026, r.year);
 	TEST_ASSERT_EQUAL_UINT8(30, r.second);
 }
@@ -132,7 +132,7 @@ void test_parse_raw_groupvalue_write(void) {
 	TEST_ASSERT_TRUE(gaEqual(GroupAddress{ 0, 1, 1 }, tg.target));
 	TEST_ASSERT_TRUE(tg._isInline6);
 	TEST_ASSERT_EQUAL_UINT8(1, tg.inline6Data);
-	TEST_ASSERT_TRUE(KnxCodec::decode(KNX_DPT::DPT1, &tg.inline6Data, 1).asBool());
+	TEST_ASSERT_TRUE(KnxCodec::decode(KnxDpt::DPT1, &tg.inline6Data, 1).asBool());
 }
 
 void test_parse_raw_groupvalue_response(void) {

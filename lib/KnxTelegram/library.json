@@ -1,0 +1,11 @@
+{
+  "name": "KnxTelegram",
+  "version": "0.1.0",
+  "description": "Stateless KNX L_Data telegram builder/parser (framing, addressing, NPCI, APDU, checksum) plus the byte-stream reassembler. Delegates value coding to KnxValue. Arduino-free and host-testable.",
+  "frameworks": "*",
+  "platforms": "*",
+  "dependencies": {
+    "KnxCommon": "*",
+    "KnxValue": "*"
+  }
+}

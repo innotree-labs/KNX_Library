@@ -1,0 +1,11 @@
+{
+  "name": "KnxCoordinator",
+  "version": "0.1.0",
+  "description": "High-level KNX coordinator (class KnxCoordinator in KnxCoordinator.h): owns an injected IKnxDriver, sends KnxValues via KnxFrame, and dispatches incoming telegrams to an intrusive IKnxReceiver registry. Core is Arduino-free and host-testable. The public one-line facade Konnextor.h lives in KnxObject (top of the DAG); this module holds only the class so objects can depend on it without a cycle.",
+  "frameworks": "*",
+  "platforms": "*",
+  "dependencies": {
+    "KnxCommon": "*",
+    "KnxTelegram": "*"
+  }
+}

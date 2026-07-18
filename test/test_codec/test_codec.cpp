@@ -2,7 +2,7 @@
  * @name test_codec.cpp
  * @date 16.07.2026
  * @authors Florian Wiesner
- * @details Host unit tests for the KNX_Value codec (KnxCodec) and value type (KnxValue).
+ * @details Host unit tests for the KnxValue codec (KnxCodec) and value type (KnxValue).
  *          The cases are built from the DPT specifications — expected wire bytes and
  *          round-trips — so a wrong implementation fails instead of being ratified.
  *          Run with: pio test -e native
@@ -34,11 +34,11 @@ void test_dimincrement_enum_fixed(void) {
 
 //---- inline-6 classification ----
 void test_isinline6(void) {
-	TEST_ASSERT_TRUE(KnxCodec::isInline6(KNX_DPT::DPT1));
-	TEST_ASSERT_TRUE(KnxCodec::isInline6(KNX_DPT::DPT2));
-	TEST_ASSERT_TRUE(KnxCodec::isInline6(KNX_DPT::DPT3));
-	TEST_ASSERT_FALSE(KnxCodec::isInline6(KNX_DPT::DPT5));
-	TEST_ASSERT_FALSE(KnxCodec::isInline6(KNX_DPT::DPT9));
+	TEST_ASSERT_TRUE(KnxCodec::isInline6(KnxDpt::DPT1));
+	TEST_ASSERT_TRUE(KnxCodec::isInline6(KnxDpt::DPT2));
+	TEST_ASSERT_TRUE(KnxCodec::isInline6(KnxDpt::DPT3));
+	TEST_ASSERT_FALSE(KnxCodec::isInline6(KnxDpt::DPT5));
+	TEST_ASSERT_FALSE(KnxCodec::isInline6(KnxDpt::DPT9));
 }
 
 //---- DPT1 ----
@@ -49,9 +49,9 @@ void test_dpt1(void) {
 	TEST_ASSERT_EQUAL_UINT8(0x00, buf[0]);
 
 	uint8_t on = 0x01;
-	TEST_ASSERT_TRUE(KnxCodec::decode(KNX_DPT::DPT1, &on, 1).asBool());
+	TEST_ASSERT_TRUE(KnxCodec::decode(KnxDpt::DPT1, &on, 1).asBool());
 	uint8_t off = 0x00;
-	TEST_ASSERT_FALSE(KnxCodec::decode(KNX_DPT::DPT1, &off, 1).asBool());
+	TEST_ASSERT_FALSE(KnxCodec::decode(KnxDpt::DPT1, &off, 1).asBool());
 }
 
 //---- DPT3: direction bit (0x08) + 3-bit stepcode ----
@@ -64,7 +64,7 @@ void test_dpt3(void) {
 	TEST_ASSERT_EQUAL_UINT8(0x00, buf[0]);          // stop
 
 	uint8_t wire = 0x09;
-	DptDim d = KnxCodec::decode(KNX_DPT::DPT3, &wire, 1).asDim();
+	DptDim d = KnxCodec::decode(KnxDpt::DPT3, &wire, 1).asDim();
 	TEST_ASSERT_TRUE(d.increase);
 	TEST_ASSERT_EQUAL_UINT8(1, d.stepcode);
 }
@@ -76,7 +76,7 @@ void test_dpt5(void) {
 	KnxCodec::encode(Dpt5(255), buf, sizeof(buf));
 	TEST_ASSERT_EQUAL_UINT8(0xFF, buf[0]);
 	uint8_t w = 200;
-	TEST_ASSERT_EQUAL_UINT8(200, KnxCodec::decode(KNX_DPT::DPT5, &w, 1).asU8());
+	TEST_ASSERT_EQUAL_UINT8(200, KnxCodec::decode(KnxDpt::DPT5, &w, 1).asU8());
 }
 
 //---- DPT6: signed 8-bit ----
@@ -84,7 +84,7 @@ void test_dpt6(void) {
 	KnxCodec::encode(Dpt6(-1), buf, sizeof(buf));
 	TEST_ASSERT_EQUAL_UINT8(0xFF, buf[0]);
 	uint8_t w = 0x80;
-	TEST_ASSERT_EQUAL_INT8(-128, KnxCodec::decode(KNX_DPT::DPT6, &w, 1).asI8());
+	TEST_ASSERT_EQUAL_INT8(-128, KnxCodec::decode(KnxDpt::DPT6, &w, 1).asI8());
 }
 
 //---- DPT7 / DPT8: 16-bit big-endian ----
@@ -92,12 +92,12 @@ void test_dpt7_dpt8_bigendian(void) {
 	KnxCodec::encode(Dpt7(0x1234), buf, sizeof(buf));
 	TEST_ASSERT_EQUAL_UINT8(0x12, buf[0]);
 	TEST_ASSERT_EQUAL_UINT8(0x34, buf[1]);
-	TEST_ASSERT_EQUAL_UINT16(0x1234, KnxCodec::decode(KNX_DPT::DPT7, buf, 2).asU16());
+	TEST_ASSERT_EQUAL_UINT16(0x1234, KnxCodec::decode(KnxDpt::DPT7, buf, 2).asU16());
 
 	KnxCodec::encode(Dpt8(-2), buf, sizeof(buf));
 	TEST_ASSERT_EQUAL_UINT8(0xFF, buf[0]);
 	TEST_ASSERT_EQUAL_UINT8(0xFE, buf[1]);
-	TEST_ASSERT_EQUAL_INT16(-2, KnxCodec::decode(KNX_DPT::DPT8, buf, 2).asI16());
+	TEST_ASSERT_EQUAL_INT16(-2, KnxCodec::decode(KnxDpt::DPT8, buf, 2).asI16());
 }
 
 //---- DPT9: 2-octet float ----
@@ -113,7 +113,7 @@ void test_dpt9_roundtrip(void) {
 	const float samples[] = { 0.0f, 21.5f, -5.0f, 23.44f, -20.48f, 20.47f };
 	for (float s : samples) {
 		KnxCodec::encode(Dpt9(s), buf, sizeof(buf));
-		float back = KnxCodec::decode(KNX_DPT::DPT9, buf, 2).asFloat();
+		float back = KnxCodec::decode(KnxDpt::DPT9, buf, 2).asFloat();
 		TEST_ASSERT_FLOAT_WITHIN(0.01f, s, back);
 	}
 }
@@ -122,7 +122,7 @@ void test_dpt9_large_magnitude_resolution(void) {
 	// DPT9 is a lossy 2-octet float: at large magnitude the exponent grows and the step
 	// coarsens (0.01 * 2^E). -273.0 is not representable; the nearest value is -272.96.
 	KnxCodec::encode(Dpt9(-273.0f), buf, sizeof(buf));
-	float back = KnxCodec::decode(KNX_DPT::DPT9, buf, 2).asFloat();
+	float back = KnxCodec::decode(KnxDpt::DPT9, buf, 2).asFloat();
 	TEST_ASSERT_FLOAT_WITHIN(0.16f, -273.0f, back);   // resolution at exponent 4
 	TEST_ASSERT_FLOAT_WITHIN(0.001f, -272.96f, back); // exact representable value
 }
@@ -134,10 +134,10 @@ void test_dpt12_dpt13_bigendian(void) {
 	TEST_ASSERT_EQUAL_UINT8(0xAD, buf[1]);
 	TEST_ASSERT_EQUAL_UINT8(0xBE, buf[2]);
 	TEST_ASSERT_EQUAL_UINT8(0xEF, buf[3]);
-	TEST_ASSERT_EQUAL_UINT32(0xDEADBEEF, KnxCodec::decode(KNX_DPT::DPT12, buf, 4).asU32());
+	TEST_ASSERT_EQUAL_UINT32(0xDEADBEEF, KnxCodec::decode(KnxDpt::DPT12, buf, 4).asU32());
 
 	KnxCodec::encode(Dpt13(-1), buf, sizeof(buf));
-	TEST_ASSERT_EQUAL_INT32(-1, KnxCodec::decode(KNX_DPT::DPT13, buf, 4).asI32());
+	TEST_ASSERT_EQUAL_INT32(-1, KnxCodec::decode(KnxDpt::DPT13, buf, 4).asI32());
 }
 
 //---- DPT14: IEEE-754 big-endian ----
@@ -147,8 +147,8 @@ void test_dpt14(void) {
 	TEST_ASSERT_EQUAL_UINT8(0x80, buf[1]);
 	TEST_ASSERT_EQUAL_UINT8(0x00, buf[2]);
 	TEST_ASSERT_EQUAL_UINT8(0x00, buf[3]);
-	TEST_ASSERT_EQUAL_FLOAT(1.0f, KnxCodec::decode(KNX_DPT::DPT14, buf, 4).asFloat());
-	TEST_ASSERT_EQUAL_FLOAT(-3.14159f, KnxCodec::decode(KNX_DPT::DPT14,
+	TEST_ASSERT_EQUAL_FLOAT(1.0f, KnxCodec::decode(KnxDpt::DPT14, buf, 4).asFloat());
+	TEST_ASSERT_EQUAL_FLOAT(-3.14159f, KnxCodec::decode(KnxDpt::DPT14,
 		(KnxCodec::encode(Dpt14(-3.14159f), buf, sizeof(buf)), buf), 4).asFloat());
 }
 
@@ -157,7 +157,7 @@ void test_dpt10(void) {
 	DptTime t{ 3, 14, 30, 45 };                          // Wed 14:30:45
 	KnxCodec::encode(Dpt10(t), buf, sizeof(buf));
 	TEST_ASSERT_EQUAL_UINT8((3 << 5) | 14, buf[0]);
-	DptTime r = KnxCodec::decode(KNX_DPT::DPT10, buf, 3).asTime();
+	DptTime r = KnxCodec::decode(KnxDpt::DPT10, buf, 3).asTime();
 	TEST_ASSERT_EQUAL_UINT8(3, r.weekday);
 	TEST_ASSERT_EQUAL_UINT8(14, r.hour);
 	TEST_ASSERT_EQUAL_UINT8(30, r.minute);
@@ -169,12 +169,12 @@ void test_dpt11_year_mapping(void) {
 	DptDate d1{ 16, 7, 2026 };
 	KnxCodec::encode(Dpt11(d1), buf, sizeof(buf));
 	TEST_ASSERT_EQUAL_UINT8(26, buf[2]);
-	TEST_ASSERT_EQUAL_UINT16(2026, KnxCodec::decode(KNX_DPT::DPT11, buf, 3).asDate().year);
+	TEST_ASSERT_EQUAL_UINT16(2026, KnxCodec::decode(KnxDpt::DPT11, buf, 3).asDate().year);
 
 	DptDate d2{ 1, 1, 1995 };
 	KnxCodec::encode(Dpt11(d2), buf, sizeof(buf));
 	TEST_ASSERT_EQUAL_UINT8(95, buf[2]);
-	TEST_ASSERT_EQUAL_UINT16(1995, KnxCodec::decode(KNX_DPT::DPT11, buf, 3).asDate().year);
+	TEST_ASSERT_EQUAL_UINT16(1995, KnxCodec::decode(KnxDpt::DPT11, buf, 3).asDate().year);
 }
 
 //---- DPT19: datetime round-trip ----
@@ -184,7 +184,7 @@ void test_dpt19(void) {
 	dt.hour = 9; dt.minute = 5; dt.second = 30;
 	dt.summerTime = true; dt.faultFlag = false;
 	TEST_ASSERT_EQUAL_UINT8(8, KnxCodec::encode(Dpt19(dt), buf, sizeof(buf)));
-	DptDateTime r = KnxCodec::decode(KNX_DPT::DPT19, buf, 8).asDateTime();
+	DptDateTime r = KnxCodec::decode(KnxDpt::DPT19, buf, 8).asDateTime();
 	TEST_ASSERT_EQUAL_UINT16(2026, r.year);
 	TEST_ASSERT_EQUAL_UINT8(7, r.month);
 	TEST_ASSERT_EQUAL_UINT8(16, r.day);
@@ -202,7 +202,7 @@ void test_dpt232(void) {
 	TEST_ASSERT_EQUAL_UINT8(0x11, buf[0]);
 	TEST_ASSERT_EQUAL_UINT8(0x22, buf[1]);
 	TEST_ASSERT_EQUAL_UINT8(0x33, buf[2]);
-	DptColor c = KnxCodec::decode(KNX_DPT::DPT232, buf, 3).asColor();
+	DptColor c = KnxCodec::decode(KnxDpt::DPT232, buf, 3).asColor();
 	TEST_ASSERT_EQUAL_UINT8(0x11, c.r);
 	TEST_ASSERT_EQUAL_UINT8(0x22, c.g);
 	TEST_ASSERT_EQUAL_UINT8(0x33, c.b);
@@ -213,8 +213,8 @@ void test_failure_paths(void) {
 	uint8_t tiny[1];
 	TEST_ASSERT_EQUAL_UINT8(0, KnxCodec::encode(Dpt9(1.0f), tiny, 1));   // needs 2
 	uint8_t one = 0x00;
-	TEST_ASSERT_FALSE(KnxCodec::decode(KNX_DPT::DPT9, &one, 1).isValid()); // needs 2
-	TEST_ASSERT_FALSE(KnxCodec::decode(KNX_DPT::UNKNOWN, &one, 1).isValid());
+	TEST_ASSERT_FALSE(KnxCodec::decode(KnxDpt::DPT9, &one, 1).isValid()); // needs 2
+	TEST_ASSERT_FALSE(KnxCodec::decode(KnxDpt::UNKNOWN, &one, 1).isValid());
 }
 
 //---- Group address packing: hot-path currency for every send and RX match ----
