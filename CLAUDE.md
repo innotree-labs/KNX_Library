@@ -130,3 +130,56 @@ Key consequences:
 
 > The broader library redesign (Adafruit-style API, `Dpt`/`KnxValue` value types,
 > `KnxObject` + intent classes, unified RX registry) is tracked in **`PLAN.md`**.
+
+## IN-PROGRESS REFACTOR: unified `Knx` naming + `Konnextor` facade
+
+**Status: PLANNED — not started.** Delete this whole section once step 10 is done and committed.
+
+**Goal.** Adopt ONE naming convention across the library: PascalCase **`Knx…`** for every
+library folder, header file, class, and enum *type*. Drop the `KNX_` SCREAMING prefix from all
+*identifiers*. The single user-facing facade class is renamed to the product name
+**`Konnextor`**, so a sketch reads:
+
+```cpp
+#include <Konnextor.h>
+Konnextor knx("1.1.5");
+```
+
+**Scope boundaries (do NOT over-reach):**
+- The protocol word "KNX" stays as-is in **prose / doc-comments** ("the KNX bus", "a KNX
+  telegram"). Only the `KNX` *class*, the `KNX.h` header, and the `<KNX.h>` include change.
+- `#define` macros stay SCREAMING_SNAKE (correct per the C++ style guide) — leave
+  `KNX_DRIVER_RX/TX/RESN/BAUD` untouched.
+- Enum *type names* change (`KNX_DPT`→`KnxDpt`, `KNX_Priority`→`KnxPriority`); their
+  *enumerators* (`DPT1`, `DPT232`, `System`, `Normal`, …) do NOT.
+- Already-correct `Knx…` names (`KnxValue`, `KnxObject`, `KnxCoordinator`, the `KnxFrame`/
+  `KnxCodec` namespaces, …) are unchanged.
+- **File placement / library merge (point 4) is DEFERRED** — this pass only renames; it does
+  not move the facade out of the objects lib or merge libraries.
+
+**Verify after the bulk edits (and before commit):** `~/.platformio/penv/bin/pio run`
+(firmware) AND `~/.platformio/penv/bin/pio test -e native` must be green (**51/51** tests).
+
+**Steps (checklist):**
+- [ ] 1. Delete dead `lib/KNX_Common/src/KNX_Defines.h` (unused back-compat shim; old includers gone).
+- [ ] 2. Rename headers (`git mv`): `KNX_Common.h`→`KnxCommon.h`, `KNX_Driver.h`→`KnxDriver.h`,
+      `KNX_Object/src/KNX.h`→`Konnextor.h`.
+- [ ] 3. Rename lib folders (`git mv`): `KNX_Common`→`KnxCommon`, `KNX_Value`→`KnxValue`,
+      `KNX_Telegram`→`KnxTelegram`, `KNX_Driver`→`KnxDriver`, `KNX_Object`→`KnxObject`,
+      `KNX`→`KnxCoordinator`.
+- [ ] 4. Every `library.json`: update `"name"` + `"dependencies"` to the new folder names
+      (`KNX_Common`→`KnxCommon`, etc.).
+- [ ] 5. Enum type names in `KnxEnums.h` and ALL usages (~16 files for `KNX_DPT`, ~4 for
+      `KNX_Priority`): `KNX_DPT`→`KnxDpt`, `KNX_Priority`→`KnxPriority`.
+- [ ] 6. Class renames: `KNX_Driver`→`KnxDriver` (in `KnxDriver.h/.cpp`), `KNX`→`Konnextor`
+      (facade in `Konnextor.h`).
+- [ ] 7. Update includes: `"KNX_Driver.h"`→`"KnxDriver.h"` (in `KnxDriver.cpp` + `Konnextor.h`);
+      `src/main.cpp` `<KNX.h>`→`<Konnextor.h>`. (`KNX_Common.h`/`KNX_Defines.h` have no includers.)
+- [ ] 8. `src/main.cpp`: `KNX knx(...)`→`Konnextor knx(...)`.
+- [ ] 9. Docs: refresh this file's Architecture lib-tree + "User include" wording, and `PLAN.md`
+      §12 (tree / dependency arrows / facade text) to the new names.
+- [ ] 10. Verify firmware + 51/51 native green → commit → delete this section.
+
+**Tip:** the `KNX_DPT`/`KNX_Priority` and folder/name swaps are safe with `perl -pi -e` over the
+file list from `grep -rl`; do the class `KNX`→`Konnextor` rename carefully (word-boundary,
+identifier only — never the protocol word in comments).
