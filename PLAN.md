@@ -121,7 +121,10 @@ Bottom escape hatch; most users never touch it.
   implementation, not a parallel one.**
 - **Callbacks are plain function pointers** (`void(*)(...)`, like today's
   `KNX_Callback`). **No capturing lambdas / `std::function`** — they heap-allocate
-  and bloat on AVR.
+  and bloat on AVR. A **non-capturing** lambda is fine: it implicitly converts to a
+  function pointer, so it compiles into the same storage with no heap. Both a named
+  free function and a non-capturing lambda are therefore valid at every `onUpdate`
+  — which style the *examples* teach is a separate UX decision, see §6.
 
 ### Command GA vs status GA (decided: combine on intent objects)
 
@@ -162,6 +165,39 @@ Callback shapes (decoded, no user-side DPT):
 kitchen.onUpdate(void(*)(bool on));            // intent → decoded native type
 o.onUpdate(void(*)(const KnxValue& v));        // raw → generic value, v.asFloat() etc.
 ```
+
+**Sketch-level callback style (as-built, decided on UX grounds).** The signature above accepts
+either form, so this is purely what the *examples* teach — and examples get copied, so the
+choice matters. Decision: **named free functions, not inline lambdas.**
+
+```cpp
+void onKitchenChanged(bool on);              // prototype, above setup()
+
+void setup() {
+    kitchen.onUpdate(onKitchenChanged);      // one line per binding
+    roomTemp.onUpdate(onTemperatureChanged);
+}
+
+void loop() { knx.loop(); }
+
+void onKitchenChanged(bool on) { … }         // body, below loop()
+```
+
+Rationale, strongest first:
+- **`setup()` becomes a flat wiring manifest.** Inline lambda bodies interleave configuration
+  and behaviour, so "what is this device bound to?" can't be answered without reading handler
+  internals. One line per binding answers *what*, not *how*.
+- **It is the Arduino idiom** (`attachInterrupt(pin, handler, …)`) — native to the audience an
+  Adafruit-style library targets.
+- A named handler documents intent, is reusable across several objects, and appears in a stack
+  trace; a lambda does none of these.
+
+Cost, and it is real: the bodies sit below `loop()` (the thesis layout), so in a **`.cpp`** each
+handler needs a **forward declaration** — C++ requires declaration before use. A user's **`.ino`
+never pays this**: the Arduino builder generates prototypes. Omitting one yields a confusing
+error for a beginner, so the showcase comments explain why the prototypes are there. Handlers
+defined *above* `setup()` would avoid the prototypes entirely and was the considered
+alternative; the thesis order won on keeping the file top focused on configuration.
 
 Boundaries / decisions:
 
