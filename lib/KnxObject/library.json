@@ -1,7 +1,7 @@
 {
   "name": "KnxObject",
   "version": "0.1.0",
-  "description": "Stateful KNX objects (PLAN §5-7) plus the public Konnextor.h facade. KnxObject : IKnxReceiver holds a GA/DPT/cached value/callback, self-registers in the coordinator's intrusive registry, and decodes incoming telegrams with its own DPT. Intent subclasses (KnxLight, KnxDimmLight, KnxBlind, KnxTemperature, ...) hide the DPT. Konnextor.h is the single user include: it sits atop the DAG and pulls the driver + coordinator + values + all objects (a sketch writes only #include <Konnextor.h>). Header-only so the LDF pulls no Arduino-bound translation unit into native tests.",
+  "description": "Stateful KNX objects (PLAN §5-7). KnxObject : IKnxReceiver holds a GA/DPT/cached value/callback, self-registers in the coordinator's intrusive registry, and decodes incoming telegrams with its own DPT. Intent subclasses (KnxLight, KnxDimmLight, KnxBlind, KnxTemperature, ...) hide the DPT. Header-only so the LDF pulls no Arduino-bound translation unit into native tests; the public Konnextor.h facade lives in its own library above this one.",
   "frameworks": "*",
   "platforms": "*",
   "dependencies": {

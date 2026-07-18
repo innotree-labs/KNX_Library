@@ -15,9 +15,11 @@
  *
  *          Layering note: the dependency-injection CORE is `KnxCoordinator` (KnxCoordinator.h) —
  *          Arduino-free, host-testable with a mock driver, and the type intent objects reference.
- *          The `Konnextor` class here is a thin Arduino subclass that OWNS a concrete KnxDriver, so the
- *          user never instantiates or injects a driver. This facade sits at the top of the
- *          dependency DAG (nothing includes it), so it can bundle the whole stack without a cycle.
+ *          The `Konnextor` class here is a thin Arduino subclass that OWNS a concrete KnxDriver, so
+ *          the user never instantiates or injects a driver. This header is the sole content of the
+ *          `Konnextor` library, which sits alone at the top of the dependency DAG (nothing includes
+ *          it), so it can bundle the whole stack without a cycle — and, being Arduino-only, it stays
+ *          out of native test builds, which reach for KnxCoordinator.h and the object headers direct.
  *          Advanced users can still inject their own IKnxDriver by using `KnxCoordinator` directly.
 */
 

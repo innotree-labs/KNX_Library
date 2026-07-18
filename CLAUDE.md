@@ -27,12 +27,13 @@ Strict layered design — dependencies only flow downward, acyclic (PLAN §12):
 
 ```
 src/main.cpp        ← showcase sketch: wires the stack + drives intent objects
+lib/Konnextor/      ← THE public surface, and nothing else: Konnextor.h — the single user
+                      include, sole root of the DAG. Defines the Konnextor node class (owns a
+                      KnxDriver, built from the physical address). Header-only, Arduino-only.
 lib/KnxObject/      ← KnxObject : IKnxReceiver + intent classes (KnxLight, KnxDimmLight,
-                      KnxRGB, KnxBlind, KnxTemperature, …) grouped by domain header;
-                      Konnextor.h is the public one-line facade (top of the DAG). Header-only.
+                      KnxRGB, KnxBlind, KnxTemperature, …) grouped by domain header. Header-only.
 lib/KnxCoordinator/ ← DI core class KnxCoordinator (KnxCoordinator.h): send(ga, KnxValue),
                       intrusive IKnxReceiver registry, loop(); holds an injected IKnxDriver*
-                      (the user-facing Konnextor node subclass owning the driver is in Konnextor.h)
 lib/KnxDriver/      ← concrete ATTiny / TP-UART UART driver : IKnxDriver (target-only)
 lib/KnxTelegram/    ← stateless L_Data framing + reassembler (KnxFrame, KnxReassembler);
                       Arduino-free, host-tested
@@ -43,17 +44,21 @@ examples/KNX_Device/← thesis button state machines (SingleButton/TwoButtonDimm
                       NOT in the build, NOT part of the library surface (PLAN §12)
 ```
 
-Dependency flow: `KnxObject → KnxCoordinator → {KnxTelegram, KnxValue, KnxCommon}`,
+Dependency flow: `Konnextor → {KnxDriver, KnxObject, KnxCoordinator, KnxValue, KnxCommon}`,
+`KnxObject → KnxCoordinator → {KnxTelegram, KnxValue, KnxCommon}`,
 `KnxDriver → {KnxTelegram, KnxCommon}`, `KnxTelegram → KnxValue → KnxCommon`.
 Interfaces (`IKnxDriver`, `IKnxReceiver`) live in `KnxCommon` below their consumers, so the
-coordinator never includes the concrete driver or object headers — no cycle.
+coordinator never includes the concrete driver or object headers — no cycle. `Konnextor` is the
+only library above the driver, and nothing includes it — which is exactly why it can bundle the
+whole stack, and why native tests (which include `KnxCoordinator.h` and the object headers
+directly) never drag the Arduino driver into a host build.
 
 No global singletons. Dependencies are injected by constructor pointer/reference.
 
 **User include & construction:** a sketch needs only `#include <Konnextor.h>` and
-`Konnextor knx("1.1.5");`. `Konnextor.h` (in `KnxObject`, atop the DAG) pulls in the driver, the
-coordinator core, the value currency, and every intent class, then defines the user-facing
-**`Konnextor` node class** — a thin
+`Konnextor knx("1.1.5");`. `Konnextor.h` (its own library, sole root of the DAG) pulls in the
+driver, the coordinator core, the value currency, and every intent class, then defines the
+user-facing **`Konnextor` node class** — a thin
 Arduino subclass of `KnxCoordinator` that *owns* a `KnxDriver` and is built from the physical
 address, so the user never instantiates or injects a driver (address typed once). The
 dependency-injection **core is `KnxCoordinator`** (`KnxCoordinator.h`): Arduino-free, host-testable

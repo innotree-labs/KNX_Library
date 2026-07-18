@@ -264,22 +264,24 @@ lib/
     KnxCoordinator.h/.cpp  class KnxCoordinator: IKnxReceiver linked-list head, send(ga, KnxValue),
                            dispatch; holds the injected IKnxDriver*. Arduino-free, host-testable.
   KnxObject/     KnxObject : IKnxReceiver (base, carries `next` ptr) + intent classes BY DOMAIN
-    Konnextor.h         public facade: #includes driver + coordinator + values + all objects, then
-                        defines class Konnextor : public KnxCoordinator (owns a KnxDriver, built
-                        from a physical-address string). The single user include. See "User include".
     KnxObject.h
     KnxLighting.h       KnxLight (DPT1), KnxDimmLight (DPT1+DPT3), KnxRGB (DPT232)
     KnxCovers.h         KnxBlind (DPT1)
     KnxClimate.h        KnxTemperature (DPT9), KnxHumidity (DPT9)
     KnxDateTime.h       KnxTime (DPT10), KnxDate (DPT11), KnxDateTime (DPT19)
     KnxScalars.h        KnxPercent (DPT5.001), KnxChar (DPT4), KnxFloat (DPT14)
+  Konnextor/     the public surface, alone in its own library at the top of the DAG
+    Konnextor.h         public facade: #includes driver + coordinator + values + all objects, then
+                        defines class Konnextor : public KnxCoordinator (owns a KnxDriver, built
+                        from a physical-address string). The single user include. See "User include".
   examples/      KNX_Device (button state machines) demoted here — optional helper from the
                  thesis, NOT part of the core surface, NOT included by Konnextor.h
 ```
 
 Dependency arrows (downward, acyclic):
-- `KnxObject → {KnxCoordinator, KnxValue, KnxTelegram}`; its `Konnextor.h` facade also
-  → `KnxDriver` (the facade is the only thing above the driver)
+- `Konnextor → {KnxDriver, KnxObject, KnxCoordinator, KnxValue, KnxCommon}` — the facade lib is
+  the sole root and the only thing above the driver; nothing includes it
+- `KnxObject → {KnxCoordinator, KnxValue, KnxTelegram}`
 - `KnxCoordinator → {KnxTelegram, KnxValue, KnxInterfaces}`
 - `KnxTelegram → KnxValue → KnxCommon`
 - `KnxDriver → KnxInterfaces` (implements `IKnxDriver`)
@@ -319,8 +321,9 @@ one-liner and the host-testable DI core (they conflicted — see cycle-breaking 
   (`KnxCoordinator`) and the transceiver `U_SetAddress` (`KnxDriver`) internally, so the user never
   instantiates or injects a driver and never types the address twice. Because `Konnextor` **is-a**
   `KnxCoordinator`, intent objects bind to it directly.
-- **`Konnextor.h`** is the public facade (lives in `KnxObject`, atop the DAG): it `#include`s the
-  driver + `KnxCoordinator` + `KnxValue` + every intent domain header, then defines the `Konnextor`
+- **`Konnextor.h`** is the public facade, and the sole content of its own `Konnextor` library at
+  the top of the DAG: it `#include`s the driver + `KnxCoordinator` + `KnxValue` + every intent
+  domain header, then defines the `Konnextor`
   class. It is Arduino-only (pulls the driver) — the host tests include `KnxCoordinator.h` and the
   object headers directly, never the facade, so the Arduino driver never enters a native build.
 - **Advanced escape hatch:** a user who wants a different transport (custom driver, on-hardware
