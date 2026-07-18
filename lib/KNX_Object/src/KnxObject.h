@@ -32,7 +32,7 @@
 class KnxObject : public IKnxReceiver {
 	protected:
 		//---- Members ----
-		KNX*     p_knx;                    // coordinator (not owned; must outlive this object)
+		KnxCoordinator* p_knx;             // coordinator (not owned; must outlive this object)
 		uint16_t commandGa;                // packed GA that write() transmits to
 		uint16_t statusGa;                 // packed GA this object listens on
 		KNX_DPT  objectDpt;                // DPT used to encode writes and decode receives
@@ -55,7 +55,7 @@ class KnxObject : public IKnxReceiver {
 		 * @param statusGa   Packed group address this object listens on for feedback.
 		 * @param dpt        Datapoint type used to encode writes and decode receives.
 		*/
-		KnxObject(KNX& knx, uint16_t cmdGa, uint16_t statusGa, KNX_DPT dpt)
+		KnxObject(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa, KNX_DPT dpt)
 			: p_knx(&knx), commandGa(cmdGa), statusGa(statusGa), objectDpt(dpt) {
 			p_knx->registerReceiver(this);
 		}
@@ -63,7 +63,7 @@ class KnxObject : public IKnxReceiver {
 		/**
 		 * @brief Constructs an object whose status GA defaults to its command GA.
 		*/
-		KnxObject(KNX& knx, uint16_t ga, KNX_DPT dpt)
+		KnxObject(KnxCoordinator& knx, uint16_t ga, KNX_DPT dpt)
 			: KnxObject(knx, ga, ga, dpt) {}
 
 		//---- Destructor: unlink from the registry so a scoped object cannot dangle ----
@@ -114,10 +114,10 @@ class KnxObject : public IKnxReceiver {
 // ================= Arduino String conveniences (config-time only) =================
 #ifdef ARDUINO
 	public:
-		KnxObject(KNX& knx, String cmdGa, String statusGa, KNX_DPT dpt)
+		KnxObject(KnxCoordinator& knx, String cmdGa, String statusGa, KNX_DPT dpt)
 			: KnxObject(knx, packedGroupAddressFromString(cmdGa),
 			            packedGroupAddressFromString(statusGa), dpt) {}
-		KnxObject(KNX& knx, String ga, KNX_DPT dpt)
+		KnxObject(KnxCoordinator& knx, String ga, KNX_DPT dpt)
 			: KnxObject(knx, packedGroupAddressFromString(ga), dpt) {}
 #endif
 };

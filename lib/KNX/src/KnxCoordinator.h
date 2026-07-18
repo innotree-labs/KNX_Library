@@ -3,12 +3,17 @@
  * @name KnxCoordinator.h
  * @date 18.07.2026
  * @authors Florian Wiesner
- * @details High-level KNX coordinator. Owns an injected link-layer driver (IKnxDriver),
- *          assembles outgoing telegrams from a KnxValue via KnxFrame, and dispatches incoming
- *          telegrams to an intrusive list of IKnxReceiver objects that decode with their own
- *          DPT (PLAN §5–7). The core is Arduino-free and depends only on the driver interface,
- *          so it is host-testable with a mock driver; the String-based physical-address ctor and
- *          the stateless String send() tier are Arduino conveniences confined to #ifdef ARDUINO.
+ * @details High-level KNX coordinator (the dependency-injection core). Owns an injected
+ *          link-layer driver (IKnxDriver), assembles outgoing telegrams from a KnxValue via
+ *          KnxFrame, and dispatches incoming telegrams to an intrusive list of IKnxReceiver
+ *          objects that decode with their own DPT (PLAN §5–7). Arduino-free and depends only on
+ *          the driver interface, so it is host-testable with a mock driver.
+ *
+ *          This is the class intent objects reference (KnxCoordinator&). End-user sketches use
+ *          the `KNX` facade (KNX.h) — a thin Arduino subclass that owns a concrete KNX_Driver and
+ *          is built from a physical-address string — so the driver is hidden without giving up
+ *          the injectable, testable core here. The String ctor + stateless String send() tier are
+ *          Arduino conveniences confined to #ifdef ARDUINO.
 */
 
 //---- Standard / platform libraries ----
@@ -23,7 +28,7 @@
 #include "KnxValue.h"
 #include "KnxFrame.h"        // framing (pulls in KnxCodec)
 
-class KNX {
+class KnxCoordinator {
 	private:
 		//---- Config ----
 		// RX buffer holds a full standard frame (up to 6 header + 16 APDU + checksum).
@@ -46,7 +51,7 @@ class KNX {
 		 * @param driver          Link-layer driver (not owned; must outlive the coordinator).
 		 * @param physicalAddress Physical address of this device (frame source).
 		*/
-		KNX(IKnxDriver* driver, PhysicalAddress physicalAddress)
+		KnxCoordinator(IKnxDriver* driver, PhysicalAddress physicalAddress)
 			: p_driver(driver), physicalAddress(physicalAddress) {}
 
 		//---- Lifecycle (delegated to the driver) ----
@@ -108,7 +113,7 @@ class KNX {
 		/**
 		 * @brief Arduino convenience: construct from a driver and a "area.line.device" string.
 		*/
-		KNX(IKnxDriver* driver, String physicalAddress)
+		KnxCoordinator(IKnxDriver* driver, String physicalAddress)
 			: p_driver(driver), physicalAddress(physicalAddressFromString(physicalAddress)) {}
 
 		/**

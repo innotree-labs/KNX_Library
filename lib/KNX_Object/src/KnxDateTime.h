@@ -23,9 +23,9 @@ class KnxTime : public KnxObject {
 		}
 
 	public:
-		KnxTime(KNX& knx, uint16_t cmdGa, uint16_t statusGa)
+		KnxTime(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT10) {}
-		KnxTime(KNX& knx, uint16_t ga)
+		KnxTime(KnxCoordinator& knx, uint16_t ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT10) {}
 
 		/** @brief Publishes a time of day. */
@@ -37,9 +37,9 @@ class KnxTime : public KnxObject {
 		void onUpdate(void (*callback)(DptTime time)) { p_onChange = callback; }
 
 #ifdef ARDUINO
-		KnxTime(KNX& knx, String cmdGa, String statusGa)
+		KnxTime(KnxCoordinator& knx, String cmdGa, String statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT10) {}
-		KnxTime(KNX& knx, String ga)
+		KnxTime(KnxCoordinator& knx, String ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT10) {}
 #endif
 };
@@ -57,9 +57,9 @@ class KnxDate : public KnxObject {
 		}
 
 	public:
-		KnxDate(KNX& knx, uint16_t cmdGa, uint16_t statusGa)
+		KnxDate(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT11) {}
-		KnxDate(KNX& knx, uint16_t ga)
+		KnxDate(KnxCoordinator& knx, uint16_t ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT11) {}
 
 		/** @brief Publishes a calendar date. */
@@ -71,9 +71,9 @@ class KnxDate : public KnxObject {
 		void onUpdate(void (*callback)(DptDate date)) { p_onChange = callback; }
 
 #ifdef ARDUINO
-		KnxDate(KNX& knx, String cmdGa, String statusGa)
+		KnxDate(KnxCoordinator& knx, String cmdGa, String statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT11) {}
-		KnxDate(KNX& knx, String ga)
+		KnxDate(KnxCoordinator& knx, String ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT11) {}
 #endif
 };
@@ -91,9 +91,9 @@ class KnxDateTime : public KnxObject {
 		}
 
 	public:
-		KnxDateTime(KNX& knx, uint16_t cmdGa, uint16_t statusGa)
+		KnxDateTime(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT19) {}
-		KnxDateTime(KNX& knx, uint16_t ga)
+		KnxDateTime(KnxCoordinator& knx, uint16_t ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT19) {}
 
 		/** @brief Publishes a combined date and time. */
@@ -105,9 +105,9 @@ class KnxDateTime : public KnxObject {
 		void onUpdate(void (*callback)(DptDateTime datetime)) { p_onChange = callback; }
 
 #ifdef ARDUINO
-		KnxDateTime(KNX& knx, String cmdGa, String statusGa)
+		KnxDateTime(KnxCoordinator& knx, String cmdGa, String statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT19) {}
-		KnxDateTime(KNX& knx, String ga)
+		KnxDateTime(KnxCoordinator& knx, String ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT19) {}
 #endif
 };

@@ -25,9 +25,9 @@ class KnxTemperature : public KnxObject {
 		}
 
 	public:
-		KnxTemperature(KNX& knx, uint16_t cmdGa, uint16_t statusGa)
+		KnxTemperature(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT9) {}
-		KnxTemperature(KNX& knx, uint16_t ga)
+		KnxTemperature(KnxCoordinator& knx, uint16_t ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT9) {}
 
 		/** @brief Publishes a temperature reading in degrees Celsius. */
@@ -39,9 +39,9 @@ class KnxTemperature : public KnxObject {
 		void onUpdate(void (*callback)(float celsius)) { p_onChange = callback; }
 
 #ifdef ARDUINO
-		KnxTemperature(KNX& knx, String cmdGa, String statusGa)
+		KnxTemperature(KnxCoordinator& knx, String cmdGa, String statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT9) {}
-		KnxTemperature(KNX& knx, String ga)
+		KnxTemperature(KnxCoordinator& knx, String ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT9) {}
 #endif
 };
@@ -60,9 +60,9 @@ class KnxHumidity : public KnxObject {
 		}
 
 	public:
-		KnxHumidity(KNX& knx, uint16_t cmdGa, uint16_t statusGa)
+		KnxHumidity(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT9) {}
-		KnxHumidity(KNX& knx, uint16_t ga)
+		KnxHumidity(KnxCoordinator& knx, uint16_t ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT9) {}
 
 		/** @brief Publishes a relative-humidity reading in percent. */
@@ -74,9 +74,9 @@ class KnxHumidity : public KnxObject {
 		void onUpdate(void (*callback)(float percent)) { p_onChange = callback; }
 
 #ifdef ARDUINO
-		KnxHumidity(KNX& knx, String cmdGa, String statusGa)
+		KnxHumidity(KnxCoordinator& knx, String cmdGa, String statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT9) {}
-		KnxHumidity(KNX& knx, String ga)
+		KnxHumidity(KnxCoordinator& knx, String ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT9) {}
 #endif
 };

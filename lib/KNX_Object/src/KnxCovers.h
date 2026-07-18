@@ -19,7 +19,7 @@ class KnxBlind : public KnxObject {
 		uint16_t stopGa;   // packed GA for the DPT1 step/stop command
 
 	public:
-		KnxBlind(KNX& knx, uint16_t moveGa, uint16_t stepStopGa)
+		KnxBlind(KnxCoordinator& knx, uint16_t moveGa, uint16_t stepStopGa)
 			: KnxObject(knx, moveGa, KNX_DPT::DPT1), stopGa(stepStopGa) {}
 
 		/** @brief Moves the blind down (DPT1.008 value 1). */
@@ -30,7 +30,7 @@ class KnxBlind : public KnxObject {
 		bool stop(void) { return p_knx->send(stopGa, Dpt1(true)); }
 
 #ifdef ARDUINO
-		KnxBlind(KNX& knx, String moveGa, String stepStopGa)
+		KnxBlind(KnxCoordinator& knx, String moveGa, String stepStopGa)
 			: KnxObject(knx, packedGroupAddressFromString(moveGa), KNX_DPT::DPT1),
 			  stopGa(packedGroupAddressFromString(stepStopGa)) {}
 #endif

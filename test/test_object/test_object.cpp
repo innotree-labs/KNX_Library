@@ -92,7 +92,7 @@ void tearDown(void) {}
 //---- receive() decodes with the object's own DPT, caches, and fires the typed callback ----
 void test_light_receive_decodes_caches_fires(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t ga = packGroupAddress(GroupAddress{ 0, 3, 0 });
 	KnxLight light(knx, ga);
 	light.onUpdate(lightCb);
@@ -110,7 +110,7 @@ void test_light_receive_decodes_caches_fires(void) {
 //---- write() sends to the COMMAND GA, caches optimistically, and returns the con result ----
 void test_light_write_command_ga_and_con(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t cmd = packGroupAddress(GroupAddress{ 0, 1, 1 });
 	uint16_t status = packGroupAddress(GroupAddress{ 0, 3, 0 });
 	KnxLight light(knx, cmd, status);
@@ -129,7 +129,7 @@ void test_light_write_command_ga_and_con(void) {
 //---- toggle() flips relative to the status-fed cache, not what we last sent ----
 void test_toggle_tracks_status_cache(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t cmd = packGroupAddress(GroupAddress{ 0, 1, 1 });
 	uint16_t status = packGroupAddress(GroupAddress{ 0, 3, 0 });
 	KnxLight light(knx, cmd, status);
@@ -149,7 +149,7 @@ void test_toggle_tracks_status_cache(void) {
 //---- Only telegrams on the object's status GA are decoded ----
 void test_match_selectivity(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t ga = packGroupAddress(GroupAddress{ 0, 3, 0 });
 	uint16_t other = packGroupAddress(GroupAddress{ 0, 3, 1 });
 	KnxLight light(knx, ga);
@@ -166,7 +166,7 @@ void test_match_selectivity(void) {
 //---- Destructor unlinks from the registry: a scoped object cannot dangle (PLAN §6) ----
 void test_destructor_unlinks(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t ga = packGroupAddress(GroupAddress{ 0, 3, 0 });
 
 	{
@@ -185,7 +185,7 @@ void test_destructor_unlinks(void) {
 //---- Raw KnxObject exposes a generic KnxValue callback decoded with its DPT ----
 void test_raw_object_generic_callback(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t ga = packGroupAddress(GroupAddress{ 0, 4, 2 });
 	KnxTemperature temp(knx, ga);
 	temp.onUpdate(tempCb);
@@ -203,7 +203,7 @@ void test_raw_object_generic_callback(void) {
 //---- KnxPercent marshals the 0..100 % API to/from the DPT5 0..255 raw range ----
 void test_percent_scaling_roundtrip(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t ga = packGroupAddress(GroupAddress{ 0, 2, 5 });
 	KnxPercent pct(knx, ga);
 	pct.onUpdate(pctCb);

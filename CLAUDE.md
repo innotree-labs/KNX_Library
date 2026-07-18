@@ -30,8 +30,9 @@ src/main.cpp        ← showcase sketch: wires the stack + drives intent objects
 lib/KNX_Object/     ← KnxObject : IKnxReceiver + intent classes (KnxLight, KnxDimmLight,
                       KnxRGB, KnxBlind, KnxTemperature, …) grouped by domain header;
                       KNX.h is the public one-line facade (top of the DAG). Header-only.
-lib/KNX/            ← coordinator CLASS (KnxCoordinator.h): send(ga, KnxValue), intrusive
-                      IKnxReceiver registry, handleUART; owns an injected IKnxDriver*
+lib/KNX/            ← DI core class KnxCoordinator (KnxCoordinator.h): send(ga, KnxValue),
+                      intrusive IKnxReceiver registry, handleUART; holds an injected IKnxDriver*
+                      (the user-facing KNX node subclass that owns the driver is in KNX.h)
 lib/KNX_Driver/     ← concrete ATTiny / TP-UART UART driver : IKnxDriver (target-only)
 lib/KNX_Telegram/   ← stateless L_Data framing + reassembler (KnxFrame, KnxReassembler);
                       Arduino-free, host-tested
@@ -49,10 +50,14 @@ coordinator never includes the concrete driver or object headers — no cycle.
 
 No global singletons. Dependencies are injected by constructor pointer/reference.
 
-**User include:** a sketch needs only `#include <KNX.h>`. That facade (in `KNX_Object`, atop the
-DAG) pulls in the driver, the coordinator, the value currency, and every intent class. The
-coordinator *class* lives in `KnxCoordinator.h`, kept separate from the facade so objects can
-depend on it without a cycle and the host tests can include it without the Arduino-only driver.
+**User include & construction:** a sketch needs only `#include <KNX.h>` and `KNX knx("1.1.5");`.
+`KNX.h` (in `KNX_Object`, atop the DAG) pulls in the driver, the coordinator core, the value
+currency, and every intent class, then defines the user-facing **`KNX` node class** — a thin
+Arduino subclass of `KnxCoordinator` that *owns* a `KNX_Driver` and is built from the physical
+address, so the user never instantiates or injects a driver (address typed once). The
+dependency-injection **core is `KnxCoordinator`** (`KnxCoordinator.h`): Arduino-free, host-testable
+with a mock driver, and the type intent objects reference (`KnxCoordinator&`). Advanced users can
+inject their own `IKnxDriver` by constructing a `KnxCoordinator` directly.
 
 **Testing:** `pio test -e native` runs the host Unity suite (codec, framing, reassembler,
 coordinator, objects) against the Arduino-free layers; `pio run` builds the firmware.

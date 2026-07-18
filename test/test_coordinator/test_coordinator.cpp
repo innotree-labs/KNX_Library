@@ -76,7 +76,7 @@ void tearDown(void) {}
 //---- send() returns the driver's real L_Data.con result (PLAN §9) ----
 void test_send_con_true(void) {
 	MockDriver mock; mock.sendResult = true;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t ga = packGroupAddress(GroupAddress{ 0, 1, 1 });
 	TEST_ASSERT_TRUE(knx.send(ga, Dpt1(true)));
 	TEST_ASSERT_EQUAL_INT(1, mock.sendCount);
@@ -88,7 +88,7 @@ void test_send_con_true(void) {
 
 void test_send_con_false(void) {
 	MockDriver mock; mock.sendResult = false;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	TEST_ASSERT_FALSE(knx.send(packGroupAddress(GroupAddress{ 0, 1, 1 }), Dpt1(true)));
 	TEST_ASSERT_EQUAL_INT(1, mock.sendCount);
 }
@@ -96,7 +96,7 @@ void test_send_con_false(void) {
 //---- An unencodable value short-circuits: driver is never called ----
 void test_send_build_failure(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	KnxValue bad;   // dpt == UNKNOWN
 	TEST_ASSERT_FALSE(knx.send(0x0001, bad));
 	TEST_ASSERT_EQUAL_INT(0, mock.sendCount);
@@ -105,7 +105,7 @@ void test_send_build_failure(void) {
 //---- One queued frame dispatches to the matching receiver with the decoded value ----
 void test_dispatch_single(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t ga = packGroupAddress(GroupAddress{ 0, 3, 0 });
 	TestReceiver rx(ga);
 	knx.registerReceiver(&rx);
@@ -122,7 +122,7 @@ void test_dispatch_single(void) {
 //---- Two queued frames drain in a single handleUART() call ----
 void test_drain_loop_two_frames(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t ga = packGroupAddress(GroupAddress{ 0, 3, 0 });
 	TestReceiver rx(ga);
 	knx.registerReceiver(&rx);
@@ -139,7 +139,7 @@ void test_drain_loop_two_frames(void) {
 //---- Only the receiver whose GA matches is fired ----
 void test_match_selectivity(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t gaA = packGroupAddress(GroupAddress{ 0, 3, 0 });
 	uint16_t gaB = packGroupAddress(GroupAddress{ 0, 3, 1 });
 	TestReceiver rxA(gaA), rxB(gaB);
@@ -158,7 +158,7 @@ void test_match_selectivity(void) {
 //---- Registry is idempotent and supports unregister ----
 void test_registry_idempotent_and_unregister(void) {
 	MockDriver mock;
-	KNX knx(&mock, SELF);
+	KnxCoordinator knx(&mock, SELF);
 	uint16_t ga = packGroupAddress(GroupAddress{ 0, 3, 0 });
 	TestReceiver rx(ga);
 	knx.registerReceiver(&rx);

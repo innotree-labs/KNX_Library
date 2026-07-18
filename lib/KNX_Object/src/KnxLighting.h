@@ -26,9 +26,9 @@ class KnxLight : public KnxObject {
 		}
 
 	public:
-		KnxLight(KNX& knx, uint16_t cmdGa, uint16_t statusGa)
+		KnxLight(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT1) {}
-		KnxLight(KNX& knx, uint16_t ga)
+		KnxLight(KnxCoordinator& knx, uint16_t ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT1) {}
 
 		/** @brief Switches the light on. */
@@ -46,9 +46,9 @@ class KnxLight : public KnxObject {
 		void onUpdate(void (*callback)(bool state)) { p_onChange = callback; }
 
 #ifdef ARDUINO
-		KnxLight(KNX& knx, String cmdGa, String statusGa)
+		KnxLight(KnxCoordinator& knx, String cmdGa, String statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT1) {}
-		KnxLight(KNX& knx, String ga)
+		KnxLight(KnxCoordinator& knx, String ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT1) {}
 #endif
 };
@@ -62,9 +62,9 @@ class KnxDimmLight : public KnxLight {
 		uint16_t dimGa;   // packed GA for DPT3 relative dimming
 
 	public:
-		KnxDimmLight(KNX& knx, uint16_t switchGa, uint16_t dimmingGa, uint16_t statusGa)
+		KnxDimmLight(KnxCoordinator& knx, uint16_t switchGa, uint16_t dimmingGa, uint16_t statusGa)
 			: KnxLight(knx, switchGa, statusGa), dimGa(dimmingGa) {}
-		KnxDimmLight(KNX& knx, uint16_t switchGa, uint16_t dimmingGa)
+		KnxDimmLight(KnxCoordinator& knx, uint16_t switchGa, uint16_t dimmingGa)
 			: KnxLight(knx, switchGa), dimGa(dimmingGa) {}
 
 		/** @brief Sends a relative brighten step (DPT3). Default is a full 100 % interval. */
@@ -81,10 +81,10 @@ class KnxDimmLight : public KnxLight {
 		}
 
 #ifdef ARDUINO
-		KnxDimmLight(KNX& knx, String switchGa, String dimmingGa, String statusGa)
+		KnxDimmLight(KnxCoordinator& knx, String switchGa, String dimmingGa, String statusGa)
 			: KnxLight(knx, switchGa, statusGa),
 			  dimGa(packedGroupAddressFromString(dimmingGa)) {}
-		KnxDimmLight(KNX& knx, String switchGa, String dimmingGa)
+		KnxDimmLight(KnxCoordinator& knx, String switchGa, String dimmingGa)
 			: KnxLight(knx, switchGa),
 			  dimGa(packedGroupAddressFromString(dimmingGa)) {}
 #endif
@@ -107,9 +107,9 @@ class KnxRGB : public KnxObject {
 		}
 
 	public:
-		KnxRGB(KNX& knx, uint16_t cmdGa, uint16_t statusGa)
+		KnxRGB(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT232) {}
-		KnxRGB(KNX& knx, uint16_t ga)
+		KnxRGB(KnxCoordinator& knx, uint16_t ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT232) {}
 
 		/** @brief Sends an RGB colour. */
@@ -121,9 +121,9 @@ class KnxRGB : public KnxObject {
 		void onUpdate(void (*callback)(uint8_t r, uint8_t g, uint8_t b)) { p_onChange = callback; }
 
 #ifdef ARDUINO
-		KnxRGB(KNX& knx, String cmdGa, String statusGa)
+		KnxRGB(KnxCoordinator& knx, String cmdGa, String statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT232) {}
-		KnxRGB(KNX& knx, String ga)
+		KnxRGB(KnxCoordinator& knx, String ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT232) {}
 #endif
 };

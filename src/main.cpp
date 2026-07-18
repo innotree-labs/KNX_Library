@@ -26,11 +26,10 @@
 #define PIN_BTN_TOGGLE  D8          // momentary button: toggle the kitchen light
 #define PIN_BTN_BRIGHT  D9          // momentary button: dim the lamp brighter
 
-//---- KNX stack: inject the driver into the coordinator ----
-KNX_Driver knxDriver(PHYS_ADDR);
-KNX        knx(&knxDriver, PHYS_ADDR);
+//---- KNX node: one object, address typed once; the bus driver is owned internally ----
+KNX knx(PHYS_ADDR);
 
-//---- Objects: (coordinator, command GA[, status GA]) — declared once, live forever ----
+//---- Objects: (node, command GA[, status GA]) — declared once, live forever ----
 KnxLight       kitchen(knx, "0/1/1", "0/3/0");        // sends on 0/1/1, listens on 0/3/0
 KnxDimmLight   lamp(knx, "0/1/2", "0/0/1");           // switch 0/1/2, relative dim 0/0/1
 KnxTemperature roomTemp(knx, "0/4/2");                // publish + read a temperature

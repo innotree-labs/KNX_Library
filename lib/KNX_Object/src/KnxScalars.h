@@ -34,9 +34,9 @@ class KnxPercent : public KnxObject {
 		}
 
 	public:
-		KnxPercent(KNX& knx, uint16_t cmdGa, uint16_t statusGa)
+		KnxPercent(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT5) {}
-		KnxPercent(KNX& knx, uint16_t ga)
+		KnxPercent(KnxCoordinator& knx, uint16_t ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT5) {}
 
 		/** @brief Publishes a percentage in the range 0..100 %. */
@@ -48,9 +48,9 @@ class KnxPercent : public KnxObject {
 		void onUpdate(void (*callback)(uint8_t percent)) { p_onChange = callback; }
 
 #ifdef ARDUINO
-		KnxPercent(KNX& knx, String cmdGa, String statusGa)
+		KnxPercent(KnxCoordinator& knx, String cmdGa, String statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT5) {}
-		KnxPercent(KNX& knx, String ga)
+		KnxPercent(KnxCoordinator& knx, String ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT5) {}
 #endif
 };
@@ -68,9 +68,9 @@ class KnxChar : public KnxObject {
 		}
 
 	public:
-		KnxChar(KNX& knx, uint16_t cmdGa, uint16_t statusGa)
+		KnxChar(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT4) {}
-		KnxChar(KNX& knx, uint16_t ga)
+		KnxChar(KnxCoordinator& knx, uint16_t ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT4) {}
 
 		/** @brief Publishes a single ASCII character. */
@@ -82,9 +82,9 @@ class KnxChar : public KnxObject {
 		void onUpdate(void (*callback)(char character)) { p_onChange = callback; }
 
 #ifdef ARDUINO
-		KnxChar(KNX& knx, String cmdGa, String statusGa)
+		KnxChar(KnxCoordinator& knx, String cmdGa, String statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT4) {}
-		KnxChar(KNX& knx, String ga)
+		KnxChar(KnxCoordinator& knx, String ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT4) {}
 #endif
 };
@@ -102,9 +102,9 @@ class KnxFloat : public KnxObject {
 		}
 
 	public:
-		KnxFloat(KNX& knx, uint16_t cmdGa, uint16_t statusGa)
+		KnxFloat(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT14) {}
-		KnxFloat(KNX& knx, uint16_t ga)
+		KnxFloat(KnxCoordinator& knx, uint16_t ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT14) {}
 
 		/** @brief Publishes a 32-bit float value. */
@@ -116,9 +116,9 @@ class KnxFloat : public KnxObject {
 		void onUpdate(void (*callback)(float value)) { p_onChange = callback; }
 
 #ifdef ARDUINO
-		KnxFloat(KNX& knx, String cmdGa, String statusGa)
+		KnxFloat(KnxCoordinator& knx, String cmdGa, String statusGa)
 			: KnxObject(knx, cmdGa, statusGa, KNX_DPT::DPT14) {}
-		KnxFloat(KNX& knx, String ga)
+		KnxFloat(KnxCoordinator& knx, String ga)
 			: KnxObject(knx, ga, KNX_DPT::DPT14) {}
 #endif
 };

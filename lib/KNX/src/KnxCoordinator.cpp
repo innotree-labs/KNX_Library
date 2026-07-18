@@ -10,7 +10,7 @@
 
 //---- Sending ----
 
-bool KNX::send(uint16_t groupAddress, const KnxValue& value) {
+bool KnxCoordinator::send(uint16_t groupAddress, const KnxValue& value) {
 	uint8_t frame[KnxFrame::MAX_FRAME];
 	uint8_t len = KnxFrame::build(physicalAddress, groupAddress, value, frame, sizeof(frame));
 	if (len == 0) return false;
@@ -19,7 +19,7 @@ bool KNX::send(uint16_t groupAddress, const KnxValue& value) {
 
 //---- Receiver registry (intrusive singly-linked list) ----
 
-void KNX::registerReceiver(IKnxReceiver* receiver) {
+void KnxCoordinator::registerReceiver(IKnxReceiver* receiver) {
 	if (!receiver) return;
 	// Idempotent: don't double-link an already-registered receiver.
 	for (IKnxReceiver* n = receiverHead; n != nullptr; n = n->nextReceiver) {
@@ -29,7 +29,7 @@ void KNX::registerReceiver(IKnxReceiver* receiver) {
 	receiverHead = receiver;
 }
 
-void KNX::unregisterReceiver(IKnxReceiver* receiver) {
+void KnxCoordinator::unregisterReceiver(IKnxReceiver* receiver) {
 	IKnxReceiver** link = &receiverHead;
 	while (*link != nullptr) {
 		if (*link == receiver) {
@@ -41,7 +41,7 @@ void KNX::unregisterReceiver(IKnxReceiver* receiver) {
 	}
 }
 
-void KNX::dispatch(const ParsedTelegram& telegram) {
+void KnxCoordinator::dispatch(const ParsedTelegram& telegram) {
 	uint16_t ga = packGroupAddress(telegram.target);
 	for (IKnxReceiver* r = receiverHead; r != nullptr; r = r->nextReceiver) {
 		if (r->matches(ga)) r->receive(telegram);
@@ -50,7 +50,7 @@ void KNX::dispatch(const ParsedTelegram& telegram) {
 
 //---- Receiving ----
 
-bool KNX::handleUART(void) {
+bool KnxCoordinator::handleUART(void) {
 	bool processed = false;
 	uint8_t len = 0;
 
