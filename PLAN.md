@@ -72,6 +72,10 @@ All three are front doors onto **one encode path** and **one value currency**
 - Stateless `send()` is the only tier that can address a **runtime-computed GA**
   (loop, value from WiFi, etc.). It has **no receive** — see §6.
 
+The `knx` above is the **node object**, constructed in one line with the driver hidden:
+`KNX knx("1.1.5");` (the physical address is the only argument). `KNX` is a thin facade over the
+injectable `KnxCoordinator` core — see §12 "User include" for why they are split.
+
 ## 4. The value type — `Dpt` / `KnxValue` (keystone)
 
 **Decision: value objects, NOT a `sendDPTn(...)` method family.** (Fork resolved
@@ -256,9 +260,13 @@ lib/
     KnxCodec.h/.cpp     symmetric native<->raw encode/decode by DPT (single source of truth)
   KNX_Telegram/  framing, checksum, APDU, addressing; delegates value coding to KNX_Value
   KNX_Driver/    concrete ATTiny/TP-UART UART driver : IKnxDriver  (replaces KNX_TPUART2)
-  KNX/           coordinator: IKnxReceiver linked-list head, send(ga, KnxValue),
-                 dispatch; owns the injected IKnxDriver*
+  KNX/           DI core (was a class named KNX; renamed to avoid clashing with the facade)
+    KnxCoordinator.h/.cpp  class KnxCoordinator: IKnxReceiver linked-list head, send(ga, KnxValue),
+                           dispatch; holds the injected IKnxDriver*. Arduino-free, host-testable.
   KNX_Object/    KnxObject : IKnxReceiver (base, carries `next` ptr) + intent classes BY DOMAIN
+    KNX.h               public facade: #includes driver + coordinator + values + all objects, then
+                        defines class KNX : public KnxCoordinator (owns a KNX_Driver, built from a
+                        physical-address string). The single user include. See §12 "User include".
     KnxObject.h
     KnxLighting.h       KnxLight (DPT1), KnxDimmLight (DPT1+DPT3), KnxRGB (DPT232)
     KnxCovers.h         KnxBlind (DPT1)
@@ -269,26 +277,55 @@ lib/
                  thesis, NOT part of the core surface, NOT included by KNX.h
 ```
 
-Dependency arrows (downward, acyclic):
-- `KNX_Object → KNX → {KNX_Telegram, KNX_Value, KnxInterfaces}`
+Dependency arrows (downward, acyclic; lib `KNX` = the `KnxCoordinator` core):
+- `KNX_Object → {KNX (KnxCoordinator), KNX_Value, KNX_Telegram}`; its `KNX.h` facade also
+  → `KNX_Driver` (the facade is the only thing above the driver)
+- `KNX (KnxCoordinator) → {KNX_Telegram, KNX_Value, KnxInterfaces}`
 - `KNX_Telegram → KNX_Value → KNX_Common`
 - `KNX_Driver → KnxInterfaces` (implements `IKnxDriver`)
 - everything → `KNX_Common`
 
 **Cycle-breaking (dependency inversion).** Interfaces are abstract base classes
 (pure virtual, no data) that sit *below* their consumers so both sides can see them:
-- `IKnxReceiver` in `KNX_Common`. `KNX` holds the intrusive linked-list head of
-  `IKnxReceiver` and **never includes `KnxObject.h`**. `KnxObject` includes `KNX.h`
-  (to `send()` + self-register) and implements `IKnxReceiver`. Arrow is one-way →
-  no cycle.
-- `IKnxDriver` in `KNX_Common`. `KNX` holds an injected `IKnxDriver*`; `KNX_Driver`
-  implements it. Swapping ATTiny/TP-UART/mock = change the injection only.
+- `IKnxReceiver` in `KNX_Common`. `KnxCoordinator` holds the intrusive linked-list head of
+  `IKnxReceiver` and **never includes `KnxObject.h`**. `KnxObject` includes `KnxCoordinator.h`
+  (to `send()` + self-register) and implements `IKnxReceiver`. Arrow is one-way → no cycle. The
+  public `KNX.h` facade sits *above* both (top of the DAG, nothing includes it), so it can bundle
+  the coordinator + objects + driver without reintroducing a cycle.
+- `IKnxDriver` in `KNX_Common`. `KnxCoordinator` holds an injected `IKnxDriver*`; `KNX_Driver`
+  implements it. Swapping ATTiny/TP-UART/mock = change the injection only. The `KNX` facade
+  subclass wires a concrete `KNX_Driver` in for the common case (see "User include" above).
 - Promote interfaces to a dedicated `KNX_Interfaces` module only if the contract set
   grows past these two.
 
-**User include:** `#include <KNX.h>` pulls in the coordinator + `KnxValue` +
-`KnxObject` + the intent domain headers → one include for the whole simple-usage
-surface. Raw `KnxObject` / `KnxValue` ride along for the advanced tiers.
+**User include + construction (as-built — the `KNX` facade decision).** A sketch writes
+**one include and one object**:
+
+```cpp
+#include <KNX.h>
+KNX knx("1.1.5");                          // driver hidden; physical address typed once
+KnxLight kitchen(knx, "0/1/1", "0/3/0");
+```
+
+This split the original single `KNX` class into two, to satisfy *both* the Adafruit-style
+one-liner and the host-testable DI core (they conflicted — see cycle-breaking below):
+
+- **`KnxCoordinator`** (`KnxCoordinator.h`, lib `KNX`) is the DI core: Arduino-free, holds an
+  injected `IKnxDriver*`, `send(ga, KnxValue)` + the intrusive `IKnxReceiver` registry. It is the
+  type intent objects reference (`KnxCoordinator&`) and the type the host tests drive with a mock.
+- **`KNX`** (defined in the `KNX.h` facade) is a thin **Arduino subclass** —
+  `class KNX : public KnxCoordinator` — that *owns* a concrete `KNX_Driver` member and is built
+  from just the physical-address string. It feeds that address to both the frame source
+  (`KnxCoordinator`) and the transceiver `U_SetAddress` (`KNX_Driver`) internally, so the user
+  never instantiates or injects a driver and never types the address twice. Because `KNX` **is-a**
+  `KnxCoordinator`, intent objects bind to it directly.
+- **`KNX.h`** is the public facade (lives in `KNX_Object`, atop the DAG): it `#include`s the
+  driver + `KnxCoordinator` + `KnxValue` + every intent domain header, then defines the `KNX`
+  class. It is Arduino-only (pulls the driver) — the host tests include `KnxCoordinator.h` and the
+  object headers directly, never the facade, so the Arduino driver never enters a native build.
+- **Advanced escape hatch:** a user who wants a different transport (custom driver, on-hardware
+  mock) constructs `KnxCoordinator knx(&myDriver, "1.1.5")` directly — the injectable path is
+  preserved, just not the default one has to type.
 
 **Host-testable core** (refines §9): `KNX_Common` + `KNX_Value` (+ most of
 `KNX_Telegram`) are Arduino-free by construction. Approach — **write testable code

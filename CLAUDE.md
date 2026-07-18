@@ -31,7 +31,7 @@ lib/KNX_Object/     ← KnxObject : IKnxReceiver + intent classes (KnxLight, Knx
                       KnxRGB, KnxBlind, KnxTemperature, …) grouped by domain header;
                       KNX.h is the public one-line facade (top of the DAG). Header-only.
 lib/KNX/            ← DI core class KnxCoordinator (KnxCoordinator.h): send(ga, KnxValue),
-                      intrusive IKnxReceiver registry, handleUART; holds an injected IKnxDriver*
+                      intrusive IKnxReceiver registry, loop(); holds an injected IKnxDriver*
                       (the user-facing KNX node subclass that owns the driver is in KNX.h)
 lib/KNX_Driver/     ← concrete ATTiny / TP-UART UART driver : IKnxDriver (target-only)
 lib/KNX_Telegram/   ← stateless L_Data framing + reassembler (KnxFrame, KnxReassembler);
@@ -68,9 +68,7 @@ coordinator, objects) against the Arduino-free layers; `pio run` builds the firm
 |---|---|---|
 | KNX UART RX | D6 | IN |
 | KNX UART TX | D7 | OUT |
-| TPUART /RESET | D0 | OUT (open-drain) |
-| TPUART SAVE | D1 | IN (FALLING interrupt → voltage failure) |
-| TPUART TW | D2 | IN (RISING interrupt → temperature warning) |
+| ATTiny /RESET | D0 | OUT (open-drain) |
 | NeoPixel data | D3 | OUT |
 | I2C SDA | SDA | Shared: MPR121, SSD1306, SHTC3 |
 | I2C SCL | SCL | Shared bus |
@@ -97,8 +95,8 @@ Demonstrates the three usage tiers (PLAN §3):
 - **Stateless send** — `knx.send("0/4/2", Dpt9(21.5f))` for a one-off to any address (no RX).
 
 Objects are declared at global scope: they self-register into the coordinator's receiver
-registry on construction and must outlive it (PLAN §6). The loop pumps `knx.handleUART()`,
-checks `knx.monitorTPUART()` for bus faults, and drives the light from two demo buttons.
+registry on construction and must outlive it (PLAN §6). The Arduino `loop()` calls `knx.loop()`
+to service the stack (parse incoming telegrams, fire callbacks) and drives the light from buttons.
 
 ## Debug flags
 

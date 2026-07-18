@@ -58,13 +58,10 @@ void setup() {
 }
 
 void loop() {
-	// 1. Pump the receive path first: parse incoming telegrams and fire callbacks.
-	knx.handleUART();
+	// 1. Service the KNX stack: parse incoming telegrams and fire object callbacks.
+	knx.loop();
 
-	// 2. Surface bus faults (voltage failure / thermal warning) reported by the driver.
-	if (knx.monitorTPUART()) Serial.println("[knx] bus fault reported");
-
-	// 3. Drive the light from the physical buttons (intent methods over the send path).
+	// 2. Drive the light from the physical buttons (intent methods over the send path).
 	bool toggleBtn = digitalRead(PIN_BTN_TOGGLE);
 	if (lastToggleBtn == HIGH && toggleBtn == LOW) {
 		// toggle() flips relative to the cached, status-fed state — tracks the real bus,

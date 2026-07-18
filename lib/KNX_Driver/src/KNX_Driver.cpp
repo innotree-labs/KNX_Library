@@ -10,18 +10,11 @@
 //----Libraries----
 #include "KNX_Driver.h"
 
-// Static ISR flags
-volatile bool KNX_Driver::_voltageFailure = false;
-volatile bool KNX_Driver::_tempWarning    = false;
-
 KNX_Driver::KNX_Driver(String physicalAddress)
 	: rxPin(KNX_DRIVER_RX), txPin(KNX_DRIVER_TX), resnPin(KNX_DRIVER_RESN),
-	  savePin(KNX_DRIVER_SAVE), twPin(KNX_DRIVER_TW), baudrate(KNX_DRIVER_BAUD),
+	  baudrate(KNX_DRIVER_BAUD),
 	  physicalAddress(physicalAddressFromString(physicalAddress)) {
 	pinMode(resnPin, INPUT_PULLUP);
-	pinMode(savePin, INPUT_PULLUP);
-	pinMode(twPin,   INPUT_PULLDOWN);
-	enableInterrupts();
 }
 
 //---- Private methods ----
@@ -32,11 +25,6 @@ void KNX_Driver::sendCommand(const uint8_t* cmd, uint16_t len) {
 
 void KNX_Driver::clearBuffer(void) {
 	while (uart.available()) (void)uart.read();
-}
-
-void KNX_Driver::enableInterrupts(void) {
-	attachInterrupt(savePin, KNX_Driver::ISR_voltageFailure, FALLING);
-	attachInterrupt(twPin,   KNX_Driver::ISR_tempWarning,    RISING);
 }
 
 bool KNX_Driver::resetRequest(void) {
@@ -148,28 +136,4 @@ bool KNX_Driver::poll(uint8_t* out, uint8_t maxLen, uint8_t& outLen) {
 		}
 	}
 	return false;
-}
-
-bool KNX_Driver::faultPending(void) {
-	bool fault = false;
-
-	if (_voltageFailure) {
-		_voltageFailure = false;
-		fault = true;
-	}
-	if (_tempWarning) {
-		_tempWarning = false;
-		if (digitalRead(twPin)) fault = true;   // confirm the warning is still asserted
-	}
-	return fault;
-}
-
-//---- ISRs ----
-
-void KNX_Driver::ISR_voltageFailure(void) {
-	_voltageFailure = true;
-}
-
-void KNX_Driver::ISR_tempWarning(void) {
-	_tempWarning = true;
 }

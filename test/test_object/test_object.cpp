@@ -57,7 +57,6 @@ class MockDriver : public IKnxDriver {
 			qHead = (qHead + 1) % MAXQ;
 			return true;
 		}
-		bool faultPending(void) override { return false; }
 };
 
 static const PhysicalAddress SELF = { 1, 1, 5 };
@@ -101,7 +100,7 @@ void test_light_receive_decodes_caches_fires(void) {
 	uint8_t n = KnxFrame::build(SELF, ga, Dpt1(true), f, sizeof(f));
 	mock.queueFrame(f, n);
 
-	TEST_ASSERT_TRUE(knx.handleUART());
+	TEST_ASSERT_TRUE(knx.loop());
 	TEST_ASSERT_EQUAL_INT(1, g_lightCbCount);
 	TEST_ASSERT_TRUE(g_lightCbState);
 	TEST_ASSERT_TRUE(light.isOn());       // cache updated from the bus
@@ -138,7 +137,7 @@ void test_toggle_tracks_status_cache(void) {
 	uint8_t f[KnxFrame::MAX_FRAME];
 	uint8_t n = KnxFrame::build(SELF, status, Dpt1(true), f, sizeof(f));
 	mock.queueFrame(f, n);
-	knx.handleUART();
+	knx.loop();
 	TEST_ASSERT_TRUE(light.isOn());
 
 	// toggle() must now command OFF.
@@ -159,7 +158,7 @@ void test_match_selectivity(void) {
 	uint8_t n = KnxFrame::build(SELF, other, Dpt1(true), f, sizeof(f));
 	mock.queueFrame(f, n);
 
-	knx.handleUART();
+	knx.loop();
 	TEST_ASSERT_EQUAL_INT(0, g_lightCbCount);
 }
 
@@ -178,7 +177,7 @@ void test_destructor_unlinks(void) {
 	uint8_t n = KnxFrame::build(SELF, ga, Dpt1(true), f, sizeof(f));
 	mock.queueFrame(f, n);
 
-	knx.handleUART();                       // must not dispatch to the dead object, must not crash
+	knx.loop();                       // must not dispatch to the dead object, must not crash
 	TEST_ASSERT_EQUAL_INT(0, g_lightCbCount);
 }
 
@@ -194,7 +193,7 @@ void test_raw_object_generic_callback(void) {
 	uint8_t n = KnxFrame::build(SELF, ga, Dpt9(21.5f), f, sizeof(f));
 	mock.queueFrame(f, n);
 
-	knx.handleUART();
+	knx.loop();
 	TEST_ASSERT_EQUAL_INT(1, g_tempCbCount);
 	TEST_ASSERT_FLOAT_WITHIN(0.01f, 21.5f, g_tempCbValue);
 	TEST_ASSERT_FLOAT_WITHIN(0.01f, 21.5f, temp.temperature());
@@ -219,7 +218,7 @@ void test_percent_scaling_roundtrip(void) {
 	uint8_t f[KnxFrame::MAX_FRAME];
 	uint8_t n = KnxFrame::build(SELF, ga, Dpt5(255), f, sizeof(f));
 	mock.queueFrame(f, n);
-	knx.handleUART();
+	knx.loop();
 	TEST_ASSERT_EQUAL_INT(1, g_pctCbCount);
 	TEST_ASSERT_EQUAL_UINT8(100, g_pctCbValue);
 	TEST_ASSERT_EQUAL_UINT8(100, pct.percent());

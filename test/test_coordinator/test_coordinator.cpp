@@ -51,7 +51,6 @@ class MockDriver : public IKnxDriver {
 			qHead = (qHead + 1) % MAXQ;
 			return true;
 		}
-		bool faultPending(void) override { return false; }
 };
 
 class TestReceiver : public IKnxReceiver {
@@ -114,12 +113,12 @@ void test_dispatch_single(void) {
 	uint8_t n = KnxFrame::build(SELF, ga, Dpt1(true), f, sizeof(f));
 	mock.queueFrame(f, n);
 
-	TEST_ASSERT_TRUE(knx.handleUART());
+	TEST_ASSERT_TRUE(knx.loop());
 	TEST_ASSERT_EQUAL_INT(1, rx.receiveCount);
 	TEST_ASSERT_TRUE(rx.lastBool);
 }
 
-//---- Two queued frames drain in a single handleUART() call ----
+//---- Two queued frames drain in a single loop() call ----
 void test_drain_loop_two_frames(void) {
 	MockDriver mock;
 	KnxCoordinator knx(&mock, SELF);
@@ -132,7 +131,7 @@ void test_drain_loop_two_frames(void) {
 	mock.queueFrame(f, n);
 	mock.queueFrame(f, n);
 
-	TEST_ASSERT_TRUE(knx.handleUART());
+	TEST_ASSERT_TRUE(knx.loop());
 	TEST_ASSERT_EQUAL_INT(2, rx.receiveCount);
 }
 
@@ -150,7 +149,7 @@ void test_match_selectivity(void) {
 	uint8_t n = KnxFrame::build(SELF, gaA, Dpt1(true), f, sizeof(f));
 	mock.queueFrame(f, n);
 
-	knx.handleUART();
+	knx.loop();
 	TEST_ASSERT_EQUAL_INT(1, rxA.receiveCount);
 	TEST_ASSERT_EQUAL_INT(0, rxB.receiveCount);
 }
@@ -167,12 +166,12 @@ void test_registry_idempotent_and_unregister(void) {
 	uint8_t f[KnxFrame::MAX_FRAME];
 	uint8_t n = KnxFrame::build(SELF, ga, Dpt1(true), f, sizeof(f));
 	mock.queueFrame(f, n);
-	knx.handleUART();
+	knx.loop();
 	TEST_ASSERT_EQUAL_INT(1, rx.receiveCount);   // fired once, not twice
 
 	knx.unregisterReceiver(&rx);
 	mock.queueFrame(f, n);
-	knx.handleUART();
+	knx.loop();
 	TEST_ASSERT_EQUAL_INT(1, rx.receiveCount);   // no longer registered
 }
 

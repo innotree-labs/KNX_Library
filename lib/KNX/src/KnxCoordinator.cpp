@@ -50,7 +50,7 @@ void KnxCoordinator::dispatch(const ParsedTelegram& telegram) {
 
 //---- Receiving ----
 
-bool KnxCoordinator::handleUART(void) {
+bool KnxCoordinator::loop(void) {
 	bool processed = false;
 	uint8_t len = 0;
 

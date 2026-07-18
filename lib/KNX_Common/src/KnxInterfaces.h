@@ -36,9 +36,6 @@ class IKnxDriver {
 		// was reassembled, copy it into out (up to maxLen), set outLen, and return true.
 		// Delivers at most one frame per call — loop until it returns false to drain the FIFO.
 		virtual bool poll(uint8_t* out, uint8_t maxLen, uint8_t& outLen) = 0;
-
-		// True if a bus-voltage failure or temperature warning has occurred since last checked.
-		virtual bool faultPending(void) = 0;
 };
 
 /**

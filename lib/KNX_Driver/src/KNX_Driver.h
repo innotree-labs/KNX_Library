@@ -6,7 +6,7 @@
  * @details Concrete link-layer driver for the STKNX-behind-ATTiny front end, which mirrors
  *          the Siemens TP-UART2 UART protocol. Implements IKnxDriver: UART bring-up, reset/
  *          state handshake, per-byte telegram transmission with a real L_Data.con result
- *          (PLAN §9), byte-stream RX via KnxReassembler, and SAVE/TW fault monitoring.
+ *          (PLAN §9), and byte-stream RX via KnxReassembler.
  *          Replaces the thesis KNX_TPUART2 and is decoupled from the telegram/coordinator
  *          layers — the coordinator injects it as an IKnxDriver*.
  *
@@ -55,8 +55,6 @@ class KNX_Driver : public IKnxDriver {
 		#define KNX_DRIVER_RX    D6
 		#define KNX_DRIVER_TX    D7
 		#define KNX_DRIVER_RESN  D0
-		#define KNX_DRIVER_SAVE  D1
-		#define KNX_DRIVER_TW    D2
 		#define KNX_DRIVER_BAUD  19200
 
 		//---- Members ----
@@ -66,13 +64,8 @@ class KNX_Driver : public IKnxDriver {
 		uint8_t rxPin;
 		uint8_t txPin;
 		uint8_t resnPin;   // Hard-reset pin
-		uint8_t savePin;   // LOW when bus voltage absent
-		uint8_t twPin;     // HIGH when transceiver temperature too high
 		uint16_t baudrate;
 		PhysicalAddress physicalAddress;
-
-		static volatile bool _voltageFailure;
-		static volatile bool _tempWarning;
 
 		//---- Private methods ----
 		// Writes a raw command byte sequence to the transceiver.
@@ -85,16 +78,11 @@ class KNX_Driver : public IKnxDriver {
 		void applyPhysicalAddress(void);
 		// Flushes pending RX bytes.
 		void clearBuffer(void);
-		// Attaches the SAVE/TW pin interrupts.
-		void enableInterrupts(void);
 		// Reads the post-transmission L_Data.con within CON_TIMEOUT_MS.
 		bool awaitConfirmation(void);
 		// Classifies a byte as an L_Data.con and its polarity.
 		static bool isConfirmation(uint8_t b);
 		static bool isPositiveConfirmation(uint8_t b);
-
-		static void ISR_voltageFailure(void);
-		static void ISR_tempWarning(void);
 
 	public:
 		//---- Constructor ----
@@ -133,10 +121,4 @@ class KNX_Driver : public IKnxDriver {
 		 * @return true if a complete frame is available this call (at most one per call).
 		*/
 		bool poll(uint8_t* out, uint8_t maxLen, uint8_t& outLen) override;
-
-		/**
-		 * @brief Returns and clears the SAVE (bus voltage) / TW (temperature) fault flags.
-		 * @return true if a fault occurred since the last call.
-		*/
-		bool faultPending(void) override;
 };

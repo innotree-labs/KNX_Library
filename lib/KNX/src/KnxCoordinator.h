@@ -67,12 +67,6 @@ class KnxCoordinator {
 		*/
 		bool reset(void) { return p_driver->reset(); }
 
-		/**
-		 * @brief Checks for a bus-voltage or temperature fault reported by the driver.
-		 * @return true if a fault occurred since the last call.
-		*/
-		bool monitorTPUART(void) { return p_driver->faultPending(); }
-
 		//---- Sending ----
 		/**
 		 * @brief Encodes a value and transmits it to a packed group address.
@@ -96,10 +90,12 @@ class KnxCoordinator {
 		void unregisterReceiver(IKnxReceiver* receiver);
 
 		/**
-		 * @brief Drains complete frames from the driver, parses and dispatches each.
+		 * @brief Services the KNX stack: call this every Arduino loop() iteration. It drains every
+		 *        complete frame the driver has received, parses each, and dispatches it to the
+		 *        registered objects (which decode, cache, and fire their callbacks). Non-blocking.
 		 * @return true if at least one telegram was processed this call.
 		*/
-		bool handleUART(void);
+		bool loop(void);
 
 		/**
 		 * @brief This device's physical address (frame source).
