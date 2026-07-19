@@ -46,6 +46,7 @@ inline bool gaEqual(const GroupAddress& a, const GroupAddress& b) {
 //---- String convenience helpers (Arduino only) ----
 #ifdef ARDUINO
 #include <Arduino.h>
+#include "KnxDebug.h"   // validation warnings go through the library-wide debug switch
 
 // Converts the string representation of a physical address into a PhysicalAddress struct
 inline PhysicalAddress physicalAddressFromString(String address) {
@@ -54,9 +55,7 @@ inline PhysicalAddress physicalAddressFromString(String address) {
 	uint8_t firstDot = address.indexOf('.');
 	uint8_t lastDot  = address.lastIndexOf('.');
 	if (firstDot == -1 || lastDot == -1 || firstDot == lastDot) {
-		#ifdef DEBUG
-		Serial.println("!---Falsches Adressformat---! Richtig: Bereich.Linie.Geraet");
-		#endif
+		KnxDebug::log("ADR !! bad physical address format, expected area.line.device");
 	}
 	physAddr.area   = address.substring(0, firstDot).toInt();
 	physAddr.line   = address.substring(firstDot + 1, lastDot).toInt();
@@ -64,21 +63,15 @@ inline PhysicalAddress physicalAddressFromString(String address) {
 
 	if (physAddr.area <= 0 || physAddr.area > 15) {
 		physAddr.area = 15;
-		#ifdef DEBUG
-		Serial.println("!---Bereich muss zwischen 1 und 15 liegen---!");
-		#endif
+		KnxDebug::log("ADR !! area out of range (1-15), clamped to 15");
 	}
 	if (physAddr.line <= 0 || physAddr.line > 15) {
 		physAddr.line = 15;
-		#ifdef DEBUG
-		Serial.println("!---Linie muss zwischen 1 und 15 liegen---!");
-		#endif
+		KnxDebug::log("ADR !! line out of range (1-15), clamped to 15");
 	}
 	if (physAddr.device <= 0 || physAddr.device > 255) {
 		physAddr.device = 255;
-		#ifdef DEBUG
-		Serial.println("!---Geraet muss zwischen 1 und 255 liegen---!");
-		#endif
+		KnxDebug::log("ADR !! device out of range (1-255), clamped to 255");
 	}
 
 	return physAddr;
@@ -91,9 +84,7 @@ inline GroupAddress groupAddressFromString(String address) {
 	uint8_t firstSlash = address.indexOf('/');
 	uint8_t lastSlash  = address.lastIndexOf('/');
 	if (firstSlash == -1 || lastSlash == -1 || firstSlash == lastSlash) {
-		#ifdef DEBUG
-		Serial.println("!---Falsches Adressformat---! Richtig: Hauptgruppe/Mittelgruppe/Gruppenaddresse");
-		#endif
+		KnxDebug::log("ADR !! bad group address format, expected main/middle/sub");
 	}
 	groupAddress.main   = address.substring(0, firstSlash).toInt();
 	groupAddress.middle = address.substring(firstSlash + 1, lastSlash).toInt();
@@ -101,27 +92,19 @@ inline GroupAddress groupAddressFromString(String address) {
 
 	if (groupAddress.main > 31) {
 		groupAddress.main = 31;
-		#ifdef DEBUG
-		Serial.println("!---Hauptgruppe muss zwischen 0 und 31 liegen---!");
-		#endif
+		KnxDebug::log("ADR !! main group out of range (0-31), clamped to 31");
 	}
 	if (groupAddress.middle > 7) {
 		groupAddress.middle = 7;
-		#ifdef DEBUG
-		Serial.println("!---Mittelgruppe muss zwischen 0 und 7 liegen---!");
-		#endif
+		KnxDebug::log("ADR !! middle group out of range (0-7), clamped to 7");
 	}
 	if (groupAddress.sub > 255) {
 		groupAddress.sub = 255;
-		#ifdef DEBUG
-		Serial.println("!---Untergruppe muss zwischen 0 und 255 liegen---!");
-		#endif
+		KnxDebug::log("ADR !! sub group out of range (0-255), clamped to 255");
 	}
 	if (groupAddress.main == 0 && groupAddress.middle == 0 && groupAddress.sub == 0) {
 		groupAddress.sub = 1; // 0/0/0 is invalid
-		#ifdef DEBUG
-		Serial.println("!---0/0/0 ist keine gueltige Gruppenadresse---! Setze auf 0/0/1");
-		#endif
+		KnxDebug::log("ADR !! 0/0/0 is not a valid group address, using 0/0/1");
 	}
 
 	return groupAddress;

@@ -89,10 +89,18 @@ bool KnxDriver::awaitConfirmation(void) {
 	while (millis() - start < CON_TIMEOUT_MS) {
 		if (uart.available()) {
 			uint8_t b = uart.read();
-			if (isConfirmation(b)) return isPositiveConfirmation(b);
+			if (isConfirmation(b)) {
+				// The con byte itself is logged: these are the spec-derived CON_* constants,
+				// the least verified part of the driver, so show the raw byte behind the verdict.
+				KnxDebug::log("DRV con byte 0x%02X -> %s", (unsigned)b,
+					isPositiveConfirmation(b) ? "positive" : "NEGATIVE");
+				return isPositiveConfirmation(b);
+			}
+			KnxDebug::log("DRV ignored byte 0x%02X while awaiting con", (unsigned)b);
 			// Any other byte in this window (e.g. an echoed data octet) is ignored.
 		}
 	}
+	KnxDebug::log("DRV !! no con within %u ms", (unsigned)CON_TIMEOUT_MS);
 	return false;   // no confirmation -> report failure, never a blind success
 }
 
@@ -100,18 +108,29 @@ bool KnxDriver::awaitConfirmation(void) {
 
 bool KnxDriver::begin(void) {
 	uart.begin(baudrate, SERIAL_8E1, txPin, rxPin);
+	KnxDebug::log("DRV uart up @ %u baud (rx %u, tx %u)",
+		(unsigned)baudrate, (unsigned)rxPin, (unsigned)txPin);
+
 	bool reset_ok = resetRequest();
 	applyPhysicalAddress();
-	return reset_ok && (stateRequest() == U_STATE_IND_OK);
+	uint8_t state = stateRequest();
+	KnxDebug::log("DRV begin: reset %s, state 0x%02X",
+		reset_ok ? "ok" : "FAILED", (unsigned)state);
+	return reset_ok && (state == U_STATE_IND_OK);
 }
 
 bool KnxDriver::reset(void) {
 	bool reset_ok = resetRequest();
 	applyPhysicalAddress();
-	return reset_ok && (stateRequest() == U_STATE_IND_OK);
+	uint8_t state = stateRequest();
+	KnxDebug::log("DRV reset: %s, state 0x%02X",
+		reset_ok ? "ok" : "FAILED", (unsigned)state);
+	return reset_ok && (state == U_STATE_IND_OK);
 }
 
 bool KnxDriver::sendTelegram(const uint8_t* frame, uint8_t length) {
+	KnxDebug::logBytes("DRV tx frame:", frame, length);
+
 	uint8_t pair[2];
 	for (uint8_t i = 0; i < length; i++) {
 		pair[0] = (uint8_t)((i == length - 1 ? U_DATA_END : U_DATA_START_CONTINUE) | (i & 0x3F));

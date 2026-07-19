@@ -23,6 +23,7 @@
 #include "KnxCoordinator.h"   // coordinator: send() + register/unregister
 #include "KnxValue.h"     // value currency + Dpt*() factories
 #include "KnxCodec.h"     // decode()/isInline6()
+#include "KnxDebug.h"     // library-wide verbose logging
 
 /**
  * @brief Raw KNX object tier: a receiver bound to one status GA / DPT with a value cache and a
@@ -81,9 +82,16 @@ class KnxObject : public IKnxReceiver {
 			else                                { in = telegram.payload;      inLen = telegram.payloadLength; }
 
 			KnxValue decoded = KnxCodec::decode(objectDpt, in, inLen);
-			if (!decoded.isValid()) return;
+			if (!decoded.isValid()) {
+				// The object matched the GA but could not decode it — usually the object's DPT
+				// disagrees with what the actuator actually publishes on that address.
+				KnxDebug::log("OBJ !! matched GA but decode failed (object DPT %u)",
+					(unsigned)objectDpt);
+				return;
+			}
 
 			cachedValue = decoded;
+			KnxDebug::log("OBJ update: DPT %u cached, firing callback", (unsigned)objectDpt);
 			onValueUpdated();
 		}
 

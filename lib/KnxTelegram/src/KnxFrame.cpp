@@ -10,6 +10,7 @@
 //---- Libraries ----
 #include "KnxFrame.h"
 #include "KnxCodec.h"
+#include "KnxDebug.h"
 #include <cstring>
 
 namespace KnxFrame {
@@ -24,12 +25,21 @@ uint8_t build(PhysicalAddress source, uint16_t targetGa, const KnxValue& value,
               uint8_t* out, uint8_t maxLen, KnxPriority priority, bool repeat) {
 	uint8_t payload[KnxCodec::MAX_PAYLOAD];
 	uint8_t plen = KnxCodec::encode(value, payload, sizeof(payload));
-	if (plen == 0) return 0;
+	if (plen == 0) {
+		KnxDebug::log("FRM !! encode failed for DPT %u", (unsigned)value.dpt);
+		return 0;
+	}
 
 	bool inline6 = KnxCodec::isInline6(value.dpt);
 	uint8_t apduLen  = inline6 ? 2 : (uint8_t)(2 + plen);
 	uint8_t frameLen = inline6 ? 8 : (uint8_t)(8 + plen);   // bytes before the checksum
-	if ((uint8_t)(frameLen + 1) > maxLen) return 0;
+	if ((uint8_t)(frameLen + 1) > maxLen) {
+		KnxDebug::log("FRM !! frame %u B exceeds buffer %u B", (unsigned)(frameLen + 1), (unsigned)maxLen);
+		return 0;
+	}
+
+	KnxDebug::log("FRM build: %s, APDU %u B, payload %u B",
+		inline6 ? "inline-6" : "multi-octet", (unsigned)apduLen, (unsigned)plen);
 
 	out[0] = (uint8_t)(0x90 | (repeat ? 0x20 : 0x00) | (uint8_t)priority);
 	out[1] = (uint8_t)((source.area << 4) | (source.line & 0x0F));
@@ -55,8 +65,15 @@ bool parse(const uint8_t* buf, uint8_t len, ParsedTelegram& out) {
 	out = ParsedTelegram{};
 
 	// Smallest valid frame is inline-6: 6 header + 2 APDU + 1 checksum = 9 bytes.
-	if (len < 9) return false;
-	if (buf[len - 1] != checksum(buf, (uint8_t)(len - 1))) return false;
+	if (len < 9) {
+		KnxDebug::log("FRM !! runt frame, %u B (min 9)", (unsigned)len);
+		return false;
+	}
+	if (buf[len - 1] != checksum(buf, (uint8_t)(len - 1))) {
+		KnxDebug::log("FRM !! checksum: got 0x%02X, want 0x%02X",
+			(unsigned)buf[len - 1], (unsigned)checksum(buf, (uint8_t)(len - 1)));
+		return false;
+	}
 
 	out.priority      = (KnxPriority)(buf[0] & 0x0C);
 	out.source.area   = (buf[1] >> 4) & 0x0F;

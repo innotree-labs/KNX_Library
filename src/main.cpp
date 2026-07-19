@@ -25,6 +25,12 @@
 #define PHYS_ADDR           "1.1.5"   // this device's KNX physical address
 #define TOGGLE_INTERVAL_MS  5000      // how often to flip the light
 
+// Flip to true when something misbehaves: traces every telegram sent and received (including
+// foreign ones), frame build/parse, value coding and driver traffic, all prefixed with [knx].
+// Left off by default — the printing itself costs time on the receive path, so a clean run
+// should be established first and the verbose trace used to explain a broken one.
+#define KNX_VERBOSE         false
+
 //---- KNX node: one object, address typed once; the bus driver is owned internally ----
 Konnextor knx(PHYS_ADDR);
 
@@ -49,6 +55,9 @@ void setup() {
 	while (!Serial && millis() < 3000) { }   // give USB CDC a moment, but never hang the board
 
 	Serial.println("\n[boot] KNX bench test — toggling 1/1/1 every 5 s");
+
+	// Must be set before begin() so the driver's own bring-up is traced too.
+	knx.enableDebugMode(KNX_VERBOSE);
 
 	// begin() brings up the UART and hands the physical address to the transceiver.
 	// If this fails the ATTiny is not answering — nothing below will work, so say so loudly.

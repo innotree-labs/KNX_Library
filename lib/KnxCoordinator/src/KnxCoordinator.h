@@ -25,6 +25,7 @@
 //---- Custom shared types + module headers ----
 #include "KnxInterfaces.h"   // IKnxDriver, IKnxReceiver
 #include "KnxAddress.h"
+#include "KnxDebug.h"        // library-wide verbose logging switch
 #include "KnxValue.h"
 #include "KnxFrame.h"        // framing (pulls in KnxCodec)
 
@@ -102,6 +103,19 @@ class KnxCoordinator {
 		 * @return The stored physical address.
 		*/
 		PhysicalAddress address(void) const { return physicalAddress; }
+
+		//---- Diagnostics ----
+		/**
+		 * @brief Turns verbose debug logging on or off: every telegram sent and received
+		 *        (including telegrams addressed to other devices), frame build/parse, value
+		 *        coding and driver traffic are printed over Serial, prefixed with [knx].
+		 *        Intended for diagnosing a misbehaving installation — it is chatty, and the
+		 *        printing itself costs time on the receive path.
+		 * @param on true to enable logging, false to silence it.
+		 * @note  This is a LIBRARY-WIDE switch, not a per-node one: the flag behind it is
+		 *        shared, so enabling it on any node enables it everywhere.
+		*/
+		void enableDebugMode(bool on) { KnxDebug::setEnabled(on); }
 
 // ================= Arduino String conveniences =================
 #ifdef ARDUINO

@@ -39,7 +39,8 @@ lib/KnxTelegram/    ← stateless L_Data framing + reassembler (KnxFrame, KnxRea
                       Arduino-free, host-tested
 lib/KnxValue/       ← value currency: KnxValue tagged union + symmetric KnxCodec. Pure
 lib/KnxCommon/      ← shared types + contracts: KnxEnums, KnxAddress, KnxTelegramTypes,
-                      KnxInterfaces (IKnxDriver / IKnxReceiver). Header-only
+                      KnxInterfaces (IKnxDriver / IKnxReceiver), KnxDebug (runtime
+                      logging switch used by every layer). Header-only
 examples/KNX_Device/← thesis button state machines (SingleButton/TwoButtonDimming, …);
                       NOT in the build, NOT part of the library surface (PLAN §12)
 ```
@@ -120,15 +121,39 @@ manifest — one line per binding, no handler bodies inline. `onUpdate` takes a 
 example teaches because it matches `attachInterrupt(pin, handler, …)` and names the intent. The
 prototypes are only needed because this is a `.cpp` — a user's `.ino` gets them generated.
 
-## Debug flags
+## Debug mode
 
-Define per-module to enable `Serial.print` output:
+Verbose tracing is a **runtime** switch — no recompile, no `#define`:
 
 ```cpp
-#define DEBUG           // KnxDriver verbose logging
+knx.enableDebugMode(true);   // call before begin() to trace driver bring-up too
 ```
 
-No debug output is active in production builds.
+It prints, all prefixed `[knx]`: driver bring-up and UART traffic, TX frame hexdumps, the raw
+`L_Data.con` byte behind each verdict, RX frame hexdumps, frame build/parse (including checksum
+mismatches), codec decode failures, per-object decode/cache updates, and **every telegram
+dispatched — including telegrams addressed to other devices** (logged as "0 receiver(s)", which
+is normal foreign traffic, not an error). Address-validation warnings ride the same switch.
+
+Implementation is `KnxCommon/src/KnxDebug.h`: a single library-wide `bool` in an inline
+function-local static, plus `log()` / `logBytes()`. Both the `#ifdef ARDUINO` guard and the
+runtime check live **inside** those functions, so call sites elsewhere carry no preprocessor
+noise and the Arduino-free layers stay Arduino-free — on a host build the bodies compile away
+and the native suite is unaffected.
+
+Three properties to know:
+- **Library-wide, not per-instance.** The flag is shared; enabling it on any node enables it
+  everywhere. This is the agreed, documented exception to the no-globals rule — it is a log
+  level, not a service locator, and it is what lets the stateless `KnxFrame`/`KnxCodec`
+  namespaces log without an object to hang a flag on.
+- **Costs ~2.4 KB flash, 0 RAM** when compiled in and disabled (measured on ESP32-C6); a
+  disabled call is one bool test. There is deliberately no compile-time master switch yet — add
+  one only if an AVR target ever needs the code stripped entirely.
+- **Arguments are still evaluated when disabled.** Guard an expensive call site with
+  `if (KnxDebug::isEnabled())`.
+
+Logging is chatty and the printing itself costs time on the receive path, so it can perturb
+what it is diagnosing. Establish a clean run first, then switch it on to explain a broken one.
 
 ## Physical layer: STKNX behind an ATTiny co-processor
 

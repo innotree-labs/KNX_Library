@@ -21,6 +21,7 @@
 #include "KnxInterfaces.h"
 #include "KnxAddress.h"
 #include "KnxEnums.h"
+#include "KnxDebug.h"
 
 //---- Other custom module headers ----
 #include "KnxReassembler.h"

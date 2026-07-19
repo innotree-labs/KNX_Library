@@ -306,6 +306,39 @@ Boundaries / decisions:
    TP-UART; the library surfaces the `L_Data.con` result only. See §9.
 4. **Registry → intrusive linked list**, no `MAX_OBJECTS`, no config knob. See §7.
 
+## 10b. Debug mode (as-built — added after the redesign shipped)
+
+**Requirement:** one runtime switch, `knx.enableDebugMode(bool)`, that traces everything the
+library does — for diagnosing a user's misbehaving installation without asking them to
+recompile. It replaces the thesis's nine `#ifdef DEBUG` sites (German-language address
+warnings in `KnxAddress.h`, the only ones that ever existed).
+
+**The constraint that shaped it.** The interesting events happen in `KnxCoordinator`,
+`KnxFrame` and `KnxCodec` — all Arduino-free, and the latter two are *stateless namespaces*
+with no `this` to reach a per-instance flag through. `#ifdef ARDUINO` alone solves the compile
+problem (host builds simply drop the `Serial` calls) but not the flag-reachability problem: a
+namespace free function cannot see state set on a `knx` object.
+
+**Decision: one library-wide `bool`** in `KnxCommon/src/KnxDebug.h`, held in an inline
+function-local static (keeps `KnxCommon` header-only under C++14 — `inline` variables would
+need C++17, and the native env is `-std=c++14`). `log()` / `logBytes()` carry *both* guards
+internally, so call sites elsewhere stay free of preprocessor noise.
+
+This is a **deliberate, agreed exception to the no-global-singletons rule.** The reasoning: it
+is a log level, not a service locator; the alternative was threading a sink parameter through
+every framing and codec signature. Consequence, documented rather than hidden: the switch is
+library-wide, so enabling it on one node enables it everywhere.
+
+Rejected alternatives: an injected `IKnxLogSink` interface (DI-consistent and testable, but
+cannot reach the stateless namespaces — the exact gap that mattered); a compile-time
+`KNX_DEBUG` master switch (defeats the "user hits a problem, flips a switch" purpose, since it
+requires a recompile).
+
+**Measured cost:** +2.4 KB flash, +0 B RAM on ESP32-C6, compiled in and disabled. A disabled
+call is one bool test. No compile-time strip switch exists yet — add one only if an AVR target
+ever needs it, on the strength of a measurement rather than speculation. Note arguments are
+still evaluated when logging is off; expensive call sites use `if (KnxDebug::isEnabled())`.
+
 ## 11. Note: CLAUDE.md physical-layer section updated
 
 DONE (this session, commit `4b37b30`): `CLAUDE.md`'s old "Planned migration:
