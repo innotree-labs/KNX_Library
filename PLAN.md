@@ -1,8 +1,25 @@
 # PLAN — KNX Library Redesign (Adafruit-style API)
 
-Status: **agreed design, not yet implemented.** Implementation to start in a
-later session. This document is the handoff artifact — it captures the decisions
-reached, the rationale, and the open forks that remain.
+Status: **as-built record — implemented and shipped** on branch `knx-redesign-common-value`.
+This is no longer a proposal: the sections below describe what exists. The rationale is kept
+deliberately, because *why* a decision was made outlives the commit that made it — where the
+build diverged from the plan as written, the section says so explicitly.
+
+**Verifying the tree** (`pio` is not on `PATH`):
+
+```
+~/.platformio/penv/bin/pio run             # firmware — Seeed XIAO ESP32-C6
+~/.platformio/penv/bin/pio test -e native  # 51/51 host Unity tests
+```
+
+**Still open — the one thing a bench can settle and a host cannot:** the `L_Data.con` byte
+values in `KnxDriver` (`CON_MASK` / `CON_PATTERN` / `CON_POSITIVE`) are derived from the TP-UART2
+spec and are **unverified against real hardware**. The thesis never read the con byte at all (it
+hard-returned `true`), so there is no reference implementation to check them against. Everything
+above the driver is host-tested; if send confirmation misbehaves on the bench, start there.
+
+**Diverged from the plan as written:** §8 (rebuild the Device layer) was **waived**, not built —
+see that section. Everything else landed substantially as described.
 
 ---
 
@@ -213,9 +230,9 @@ Boundaries / decisions:
 
 ## 7. Registry change (concrete)
 
-- Today: `KNX_Binding bindings[MAX_BINDINGS]` of `{GA, DPT, callback}` — a fixed
-  array.
-- New: **intrusive linked list** of `IKnxReceiver`. The coordinator holds a head
+- Was (thesis): `KNX_Binding bindings[MAX_BINDINGS]` of `{GA, DPT, callback}` — a fixed
+  array. Deleted.
+- Now: **intrusive linked list** of `IKnxReceiver`. The coordinator holds a head
   pointer; each `KnxObject` carries a `next` pointer, links itself in on
   construction, and unlinks in its destructor. No fixed cap, no `MAX_OBJECTS` knob —
   memory scales exactly with the objects the user declares. The incoming-telegram
@@ -225,7 +242,15 @@ Boundaries / decisions:
   served by constructing an object (raw is enough:
   `KnxObject o(knx, ga, dpt); o.onUpdate(cb);`).
 
-## 8. Rebuild the Device layer on top
+## 8. Rebuild the Device layer on top — WAIVED, not implemented
+
+> **As-built: this section was deliberately dropped.** The user chose a clean-API showcase over
+> rewiring the thesis button layer ("I don't need the main program anymore"), so `src/main.cpp`
+> demonstrates the library directly and the button state machines were demoted to
+> `examples/KNX_Device/` — **not in the build, and they do not compile against the current API**
+> (they still call deleted methods). Kept as history only; the porting steps below remain valid
+> if the layer is ever revived. The packed-GA point in the second bullet *did* ship — it landed
+> in `KnxAddress` and the object layer, independently of the Device rebuild.
 
 - `TwoButtonDimming` / `TwoButtonSwitching` / `SingleButtonSwitching` take
   `KnxLight` / `KnxObject` references instead of holding `String` GAs and rolling
@@ -247,14 +272,24 @@ Boundaries / decisions:
   truth. Concretely fixes the `DimmIncrement` enum: `Stop` and `Percent_1_5` both
   `0x00` (collision), and the percent→stepcode ordering is inverted
   (stepcode encodes number of intervals: stepcode 1 ≈ 100 %, 7 ≈ 1.5 %).
-  Verify against the DPT3.007 spec during implementation.
+  **As-built:** fixed and spec-verified — `DimmIncrement` is renumbered to the real DPT3.007
+  stepcodes (`Stop`=0 … `Percent_1_5`=7), with round-trip tests. Note this **changes runtime
+  behaviour** versus the thesis (e.g. `Percent_6` now emits stepcode 5 ≈ 6.25 %, was 2 ≈ 50 %);
+  intended, but only ever confirmed on hardware.
 - **Decoders currently cover only DPT1–5** and `KnxTelegramData` only holds
   dpt1–5. Extend to the DPT set the value types expose.
+  **As-built:** done — `KnxCodec` covers DPT1–14, 19 and 232, symmetric in both directions.
+  `KnxTelegramData` no longer exists: decoding moved to the receiving object, which owns its DPT.
 - **Host-testability (LOW priority, optional):** keep the *pure* protocol math
   (framing, checksum, DPT codecs, GA packing) free of `<Arduino.h>` so it can
   compile + unit-test on a PC in CI. This is a quality multiplier, not required;
   it would have caught the `DimmIncrement` bug in a 5-line test. Not for
   portability — Arduino is the portability layer.
+  **As-built: this got promoted from "optional" to load-bearing.** `KnxCommon` / `KnxValue` /
+  `KnxTelegram` / `KnxCoordinator` are Arduino-free, and the 51-test host suite (`pio test -e
+  native`) drove the whole redesign — it is what makes the coordinator testable with a mock
+  driver, and what keeps the Arduino-only facade out of a host build. CI wiring is still not set
+  up; the suite runs locally.
 
 ## 10. Decisions (were open forks — now settled)
 
@@ -264,8 +299,8 @@ Boundaries / decisions:
 2. **Intent class set v1 → actuators + values:**
    - Actuators: `KnxLight` (DPT1), `KnxDimmLight` (DPT1+DPT3), `KnxBlind` (DPT1).
    - Values: `KnxTemperature` / `KnxHumidity` (DPT9), `KnxTime` (DPT10),
-     `KnxDate` (DPT11), `KnxDateTime` (DPT19), `KnxRGB` (DPT232.600 — **enum + codec
-     must be extended, see §12**), `KnxPercent` (DPT5.001), `KnxChar` (DPT4),
+     `KnxDate` (DPT11), `KnxDateTime` (DPT19), `KnxRGB` (DPT232.600 — enum + codec
+     were extended for it, as-built), `KnxPercent` (DPT5.001), `KnxChar` (DPT4),
      `KnxFloat` (DPT14).
 3. **Retry policy → none in the library.** The ATTiny handles repetition like a
    TP-UART; the library surfaces the `L_Data.con` result only. See §9.
@@ -375,7 +410,6 @@ earned it. Build the **test-case catalog from the spec, not the implementation**
 cases like `0/0/0`, DPT16 truncation, checksum corruption) so tests catch a wrong
 implementation instead of ratifying it.
 
-**DPT coverage note:** the current `KnxDpt` enum stops at DPT19. `KnxRGB` needs
-**DPT232.600** (3-byte R/G/B) — extend the enum (`KnxEnums.h`) and add a codec
-entry (`KnxCodec`) for it. All other v1 intent classes map to DPTs already in the
-enum (see §10).
+**DPT coverage (as-built):** `KnxDpt` covers DPT1–14, 19 and **232.600** (3-byte R/G/B, added
+for `KnxRGB`), each with a symmetric `KnxCodec` entry and round-trip host tests. Every v1 intent
+class in §10 maps to a DPT in the enum.
