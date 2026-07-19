@@ -1,18 +1,18 @@
 /**
  * @name main.cpp
- * @date 18.07.2026
+ * @date 19.07.2026
  * @authors Florian Wiesner
- * @details Showcase sketch for the KNX library. Demonstrates the three ways to use it:
+ * @details HARDWARE BENCH TEST for the KNX library — no buttons, no user input.
  *
- *            1. Intent objects  — KnxLight / KnxDimmLight hide the DPT behind on()/toggle()/
- *                                 brighter(); they cache the bus state and fire typed callbacks.
- *            2. Value objects    — KnxTemperature publishes and receives a float, no DPT in sight.
- *            3. Stateless send   — knx.send("0/4/2", Dpt9(21.5f)) for a one-off to any address.
+ *          A single dimmable light is toggled every 5 s, and every status telegram the bus
+ *          sends back is printed over Serial. Between them these exercise the two paths that
+ *          host tests cannot reach: the driver's real transmit path (does the ATTiny accept the
+ *          frame and return a positive L_Data.con?) and the receive path (does a telegram from
+ *          the actuator get reassembled, parsed, matched and decoded back into a bool?).
  *
- *          Objects are declared at global scope: they self-register into the coordinator's
- *          receiver registry on construction and must outlive it (PLAN §6). Wire two momentary
- *          buttons to the pins below to drive the light; incoming status telegrams flow back
- *          through the onUpdate callbacks.
+ *          Watch the serial monitor at 115200 baud. Expected per cycle: one "toggle ->" line
+ *          with "confirmed", then one "[bus]" line once the actuator reports its new state. See
+ *          the failure guide at the bottom of this file for how to read a run that misbehaves.
 */
 
 //---- Libraries ----
@@ -20,79 +20,73 @@
 #include <Konnextor.h>     // the whole library: driver + coordinator + values + intent objects
 
 //---- Configuration ----
-#define BAUDRATE_SERIAL 115200
-#define PHYS_ADDR       "1.1.5"     // this device's KNX physical address
-
-#define PIN_BTN_TOGGLE  D8          // momentary button: toggle the kitchen light
-#define PIN_BTN_BRIGHT  D9          // momentary button: dim the lamp brighter
+#define BAUDRATE_SERIAL     115200
+#define PHYS_ADDR           "1.1.5"   // this device's KNX physical address
+#define TOGGLE_INTERVAL_MS  5000      // how often to flip the light
 
 //---- KNX node: one object, address typed once; the bus driver is owned internally ----
 Konnextor knx(PHYS_ADDR);
 
-//---- Objects: (node, command GA[, status GA]) — declared once, live forever ----
-KnxLight       kitchen(knx, "0/1/1", "0/3/0");        // sends on 0/1/1, listens on 0/3/0
-KnxDimmLight   lamp(knx, "0/1/2", "0/0/1");           // switch 0/1/2, relative dim 0/0/1
-KnxTemperature roomTemp(knx, "0/4/2");                // publish + read a temperature
+//---- The light under test: (node, switching GA, dimming GA, status GA) ----
+// Sends on/off to 1/1/1, would send relative dim steps to 0/2/1, listens for status on 0/1/1.
+KnxDimmLight lamp(knx, "1/1/1", "0/2/1", "0/1/1");
 
-//---- Simple rising-edge detection for the two demo buttons ----
-static bool lastToggleBtn = HIGH;
-static bool lastBrightBtn = HIGH;
+//---- Non-blocking 5 s cadence (rollover-safe: unsigned subtraction) ----
+static uint32_t ts_lastToggle = 0;
 
-//---- Callback handlers: declared here, defined below loop() ----
-// Plain functions, not lambdas — nothing is captured, so a function pointer is all the
-// library ever needs (no heap, AVR-safe). In a .ino sketch these prototypes are generated
-// for you; in a .cpp they are required because the bodies live below their use in setup().
-void onKitchenChanged(bool on);
-void onTemperatureChanged(float celsius);
+//---- Callback handler: declared here, defined below loop() ----
+void onLampChanged(bool on);
 
 void setup() {
 	Serial.begin(BAUDRATE_SERIAL);
-	pinMode(PIN_BTN_TOGGLE, INPUT_PULLUP);
-	pinMode(PIN_BTN_BRIGHT, INPUT_PULLUP);
+	while (!Serial && millis() < 3000) { }   // give USB CDC a moment, but never hang the board
 
-	knx.begin();
+	Serial.println("\n[boot] KNX bench test — toggling 1/1/1 every 5 s");
 
-	// RX: react to bus feedback with typed callbacks (no DPT, no manual decode).
-	// One line per binding — setup() reads as the wiring manifest for this device.
-	kitchen.onUpdate(onKitchenChanged);
-	roomTemp.onUpdate(onTemperatureChanged);
+	// begin() brings up the UART and hands the physical address to the transceiver.
+	// If this fails the ATTiny is not answering — nothing below will work, so say so loudly.
+	if (knx.begin()) {
+		Serial.println("[boot] driver up, bus link ready");
+	} else {
+		Serial.println("[boot] *** driver FAILED to initialise — check wiring/ATTiny ***");
+	}
+
+	lamp.onUpdate(onLampChanged);
 }
 
 void loop() {
-	// 1. Service the KNX stack: parse incoming telegrams and fire object callbacks.
+	// Service the KNX stack every iteration: parse incoming telegrams and fire callbacks.
+	// This is why the cadence below uses millis() and not delay() — a delay would stall the
+	// receive path and the status callback would arrive late or be dropped.
 	knx.loop();
 
-	// 2. Drive the light from the physical buttons (intent methods over the send path).
-	bool toggleBtn = digitalRead(PIN_BTN_TOGGLE);
-	if (lastToggleBtn == HIGH && toggleBtn == LOW) {
-		// toggle() flips relative to the cached, status-fed state — tracks the real bus,
-		// and returns the driver's L_Data.con so you know it was confirmed on the wire.
-		bool confirmed = kitchen.toggle();
-		Serial.printf("[kitchen] toggle -> %s (%s)\n",
-			kitchen.isOn() ? "ON" : "OFF", confirmed ? "confirmed" : "no ACK");
+	if (millis() - ts_lastToggle >= TOGGLE_INTERVAL_MS) {
+		ts_lastToggle = millis();
+
+		// toggle() flips relative to the cached, status-fed state and returns the driver's
+		// real L_Data.con — "no ACK" here means the transceiver did not confirm the send.
+		bool confirmed = lamp.toggle();
+		Serial.printf("[send] toggle 1/1/1 -> %s (%s)\n",
+			lamp.isOn() ? "ON" : "OFF", confirmed ? "confirmed" : "no ACK");
 	}
-	lastToggleBtn = toggleBtn;
-
-	bool brightBtn = digitalRead(PIN_BTN_BRIGHT);
-	if (lastBrightBtn == HIGH && brightBtn == LOW) {
-		lamp.on();                                   // ensure it is on, then step up
-		lamp.brighter(DimmIncrement::Percent_12_5);  // relative DPT3 dim step
-	}
-	lastBrightBtn = brightBtn;
-
-	// 3rd tier for reference: a one-off value to any address, no object needed.
-	// knx.send("0/4/2", Dpt9(21.5f));
 }
 
-//---- Handlers: run when a matching telegram arrives during knx.loop() ----
+//---- Handler: runs from knx.loop() when a status telegram arrives on 0/1/1 ----
 
-// Status feedback for the kitchen light (GA 0/3/0), already decoded to a bool.
-void onKitchenChanged(bool on) {
-	Serial.printf("[kitchen] bus says the light is now %s\n", on ? "ON" : "OFF");
-	// drive your RGB backlight / OLED here
+// Already decoded to a bool — no DPT, no manual unpacking on the user side.
+void onLampChanged(bool on) {
+	Serial.printf("[bus]  status 0/1/1 -> lamp is %s\n", on ? "ON" : "OFF");
 }
 
-// Temperature published on GA 0/4/2, already decoded from DPT9 to a float.
-void onTemperatureChanged(float celsius) {
-	Serial.printf("[roomTemp] %.1f C\n", celsius);
-}
+/*
+ * Reading a bad run:
+ *
+ *   no output at all          → serial/board problem, not KNX.
+ *   "driver FAILED"           → ATTiny not answering the U_ reset handshake (wiring, baud, power).
+ *   "no ACK" every cycle      → send path reaches the transceiver but no positive L_Data.con.
+ *                               Suspect #1 is CON_MASK / CON_PATTERN / CON_POSITIVE in
+ *                               KnxDriver.h — spec-derived and never hardware-verified.
+ *   "confirmed" but no [bus]  → TX works, RX does not: the actuator is not sending status, or
+ *                               its status GA is not 0/1/1, or reassembly/parse is failing.
+ *   [bus] but light unchanged → the telegram is fine; the actuator is not acting on 1/1/1.
+ */

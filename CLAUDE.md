@@ -79,30 +79,33 @@ coordinator, objects) against the Arduino-free layers; `pio run` builds the firm
 | I2C SDA | SDA | Shared: MPR121, SSD1306, SHTC3 |
 | I2C SCL | SCL | Shared bus |
 
-## KNX group addresses in the showcase (`src/main.cpp`)
+## KNX group addresses in the bench test (`src/main.cpp`)
 
 | Address | DPT | Direction | Purpose |
 |---|---|---|---|
-| 0/1/1 | DPT1 | OUT | `kitchen` light switching |
-| 0/3/0 | DPT1 | IN  | `kitchen` status feedback → onUpdate callback |
-| 0/1/2 | DPT1 | OUT | `lamp` switching |
-| 0/0/1 | DPT3 | OUT | `lamp` incremental dimming |
-| 0/4/2 | DPT9 | IN/OUT | `roomTemp` temperature |
+| 1/1/1 | DPT1 | OUT | `lamp` switching — the GA being toggled |
+| 0/1/1 | DPT1 | IN  | `lamp` switching status → `onLampChanged` callback |
+| 0/2/1 | DPT3 | OUT | `lamp` relative dimming (configured, **not exercised** by this test) |
 
 Group addresses are hardcoded in the sketch (no ETS) — the Adafruit-style trade-off (PLAN §1).
 Physical address of this device: **1.1.5**
 
-## Showcase sketch (`src/main.cpp`)
+## Bench-test sketch (`src/main.cpp`)
 
-Demonstrates the three usage tiers (PLAN §3):
-- **Intent objects** — `KnxLight kitchen(knx, "0/1/1", "0/3/0")`; `.on()/.off()/.toggle()`
-  flips relative to the cached status-fed state; `.onUpdate(onKitchenChanged)` for feedback.
-- **Value objects** — `KnxTemperature roomTemp(knx, "0/4/2")`; `.set(float)` / `.onUpdate`.
-- **Stateless send** — `knx.send("0/4/2", Dpt9(21.5f))` for a one-off to any address (no RX).
+`src/main.cpp` is currently a **hardware bench test**, not the API showcase: no buttons, one
+`KnxDimmLight` toggled every 5 s on a `millis()` cadence, with every status telegram printed
+over Serial at 115200. Its job is to exercise the two paths host tests cannot reach — the
+driver's real transmit path (positive `L_Data.con`?) and the full receive path (reassemble →
+parse → match → decode → callback). `knx.begin()`'s return value is printed at boot, and the
+file ends with a symptom→cause guide for reading a bad run.
 
-Objects are declared at global scope: they self-register into the coordinator's receiver
-registry on construction and must outlive it (PLAN §6). The Arduino `loop()` calls `knx.loop()`
-to service the stack (parse incoming telegrams, fire callbacks) and drives the light from buttons.
+The prior three-tier API showcase (intent objects / value objects / stateless send, with
+`kitchen`, `lamp` and `roomTemp`) is in git history at `e22c388` — restore it from there when
+the bench work is done rather than rewriting it.
+
+`delay()` must not be used for the cadence: it stalls `knx.loop()`, so status callbacks arrive
+late or get dropped. Objects are declared at global scope — they self-register into the
+coordinator's receiver registry on construction and must outlive it (PLAN §6).
 
 **Callback style in the showcase:** handlers are **named free functions**, prototyped above
 `setup()` and defined below `loop()` (the thesis layout), so `setup()` stays a flat wiring
