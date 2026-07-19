@@ -85,7 +85,11 @@ coordinator, objects) against the Arduino-free layers; `pio run` builds the firm
 |---|---|---|---|
 | 1/1/1 | DPT1 | OUT | `lamp` switching — the GA being toggled |
 | 0/1/1 | DPT1 | IN  | `lamp` switching status → `onLampChanged` callback |
-| 0/2/1 | DPT3 | OUT | `lamp` relative dimming (configured, **not exercised** by this test) |
+| 0/2/1 | DPT5 | IN  | `brightness` status from the dimmer → `onBrightnessChanged` callback |
+
+Note 0/2/1 is a DPT5 **brightness status**, not a DPT3 relative-dim command GA — so the sketch
+uses `KnxLight` + a listen-only `KnxPercent`, not `KnxDimmLight` (whose third GA is a *send*
+address for dim steps). No relative-dim command GA is configured on this device.
 
 Group addresses are hardcoded in the sketch (no ETS) — the Adafruit-style trade-off (PLAN §1).
 Physical address of this device: **1.1.5**
@@ -93,11 +97,13 @@ Physical address of this device: **1.1.5**
 ## Bench-test sketch (`src/main.cpp`)
 
 `src/main.cpp` is currently a **hardware bench test**, not the API showcase: no buttons, one
-`KnxDimmLight` toggled every 5 s on a `millis()` cadence, with every status telegram printed
-over Serial at 115200. Its job is to exercise the two paths host tests cannot reach — the
-driver's real transmit path (positive `L_Data.con`?) and the full receive path (reassemble →
-parse → match → decode → callback). `knx.begin()`'s return value is printed at boot, and the
-file ends with a symptom→cause guide for reading a bad run.
+`KnxLight` toggled every 5 s on a `millis()` cadence, plus a listen-only `KnxPercent` for the
+dimmer's brightness status, with every status telegram printed over Serial at 115200. Its job is
+to exercise the two paths host tests cannot reach — the driver's real transmit path (positive
+`L_Data.con`?) and the full receive path (reassemble → parse → match → decode → callback), the
+latter across two objects and two DPTs, which also proves registry dispatch selects the right
+receiver. `knx.begin()`'s return value is printed at boot, and the file ends with a
+symptom→cause guide for reading a bad run.
 
 The prior three-tier API showcase (intent objects / value objects / stateless send, with
 `kitchen`, `lamp` and `roomTemp`) is in git history at `e22c388` — restore it from there when
