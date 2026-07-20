@@ -373,12 +373,29 @@ supporting them means a second length rule (8-bit LG with an `0xFF` escape), a C
 a larger RX buffer. The mask above rejects them cleanly rather than misparsing them. Revisit if
 a DPT beyond 14 octets or LTE mode is ever wanted.
 
-**Open, not a defect — no link-layer ACK generation.** `U_ACK_INFO_ACK/BUSY/NACK` are declared
-in `KnxDriver.h` and never sent, so the stack never emits the acknowledge frame of TP1 §2.2.7.
-Whether that is a bug depends on the TP-UART auto-ACKing addressed frames once `U_SetAddress`
-is applied — that is Siemens datasheet behaviour, not settled by these specs. Bench evidence so
-far is consistent with auto-ACK (status telegrams arrive with no repeat storm). Verify against
-the datasheet before acting.
+**Closed, not a defect — no link-layer ACK generation is correct here.** `U_ACK_INFO_ACK/BUSY/
+NACK` are declared in `KnxDriver.h` and never sent, so the stack never emits the acknowledge
+frame of TP1 §2.2.7. `docs/TP-UART2.pdf` §3.2.3.1.7 settles it: applying `U_SetAddress` (0x28,
+which `KnxDriver::begin()` does) "activates a complete address evaluation in the TP-UART
+(group-addressed telegrams are now generally confirmed)", and the chip then emits the IACK
+itself — group frames unconditionally (`A == 1` alone means "addressed"), individually
+addressed frames when the destination matches its physical address. §3.2.3.1.8 states
+`U_AckInformation` is "only sent to the TP-UART if a host controller wants to check the
+destination address itself", within 1.7 ms of the address type octet. We don't, so we shouldn't.
+The declared constants stay for the day a host-side filter is wanted.
+
+Consequence worth knowing: the TP-UART has no view of our group address table, so it ACKs
+**every** group telegram on the bus, including traffic for other devices. That is inherent to
+address evaluation mode, not something the library chose.
+
+**The datasheet also independently confirms two things this pass changed or relied on.** The
+control byte is written `10R1cc00` for standard and `00R1cc00` for extended (§3.2.3.1.7), which
+is the same eight-value pattern the new `(ctrl & 0xD3) == 0x90` mask encodes — a second source
+agreeing with TP1 Figure 28. And `L_DATA.confirm` is `x0001011` with `x = 1` positive
+(§3.2.3.1.12.4 / frame table), which is exactly `CON_MASK 0x7F` / `CON_PATTERN 0x0B` /
+`CON_POSITIVE 0x80` in `KnxDriver.h` — those constants were flagged in the header as
+"spec-derived, unverified"; they are now verified, and the bench log's `0x8B -> positive`
+matches.
 
 Confirmed correct while reading, worth not re-litigating: the checksum is NOT-XOR (odd parity)
 as in TP1 Figure 31; `LG = APDU octets - 1` matches real bus traffic; hop count 6 is the

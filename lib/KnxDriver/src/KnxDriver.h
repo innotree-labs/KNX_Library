@@ -43,7 +43,8 @@ class KnxDriver : public IKnxDriver {
 		static constexpr uint8_t U_STATE_IND_OK = 0x07;
 
 		// L_Data.con: fixed low-nibble pattern 0x_B; bit 7 = positive confirmation.
-		// NOTE: spec-derived — validate against the actual ATTiny/TP-UART2 firmware.
+		// Verified against docs/TP-UART2.pdf, which encodes L_DATA.confirm as 'x0001011'
+		// with x = 1 positive — and against a bench run reporting 0x8B.
 		static constexpr uint8_t CON_MASK      = 0x7F;
 		static constexpr uint8_t CON_PATTERN   = 0x0B;
 		static constexpr uint8_t CON_POSITIVE  = 0x80;
