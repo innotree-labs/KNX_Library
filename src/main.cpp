@@ -29,14 +29,14 @@
 // foreign ones), frame build/parse, value coding and driver traffic, all prefixed with [knx].
 // Left off by default — the printing itself costs time on the receive path, so a clean run
 // should be established first and the verbose trace used to explain a broken one.
-#define KNX_VERBOSE         false
+#define KNX_VERBOSE         true
 
 //---- KNX node: one object, address typed once; the bus driver is owned internally ----
 Konnextor knx(PHYS_ADDR);
 
 //---- The light under test: (node, switching GA, status GA) ----
 // Sends on/off to 1/1/1, listens for switching status on 0/1/1.
-KnxLight lamp(knx, "1/1/1", "0/1/1");
+KnxLight lamp(knx, "0/1/1", "1/1/1");
 
 //---- Brightness status published by the dimmer on 0/2/1 (DPT5, listen-only here) ----
 // Single-GA ctor: command and status GA are the same, so this object matches on 0/2/1. The
