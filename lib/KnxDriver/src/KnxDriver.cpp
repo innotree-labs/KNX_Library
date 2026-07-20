@@ -84,23 +84,44 @@ bool KnxDriver::isPositiveConfirmation(uint8_t b) {
 	return (b & CON_POSITIVE) != 0;
 }
 
-bool KnxDriver::awaitConfirmation(void) {
-	uint32_t start = millis();
+bool KnxDriver::awaitConfirmation(const uint8_t* frame, uint8_t length) {
+	uint32_t start  = millis();
+	uint8_t  echoed = 0;   // transmit-echo octets matched so far
+
 	while (millis() - start < CON_TIMEOUT_MS) {
-		if (uart.available()) {
-			uint8_t b = uart.read();
-			if (isConfirmation(b)) {
-				// The con byte itself is logged: these are the spec-derived CON_* constants,
-				// the least verified part of the driver, so show the raw byte behind the verdict.
-				KnxDebug::log("DRV con byte 0x%02X -> %s", (unsigned)b,
-					isPositiveConfirmation(b) ? "positive" : "NEGATIVE");
-				return isPositiveConfirmation(b);
-			}
-			KnxDebug::log("DRV ignored byte 0x%02X while awaiting con", (unsigned)b);
-			// Any other byte in this window (e.g. an echoed data octet) is ignored.
+		if (!uart.available()) continue;
+		uint8_t b = uart.read();
+
+		// The TP-UART echoes every transmitted octet back before the L_Data.con. Those
+		// octets must be consumed *before* the con test: a data byte may legally be 0x0B
+		// or 0x8B, which isConfirmation() would otherwise read as the con — returning
+		// early and leaking the rest of the echo into poll()/the reassembler.
+		// Matched positionally rather than by count, so a front end that does not echo
+		// (the ATTiny may not) still works: its con byte fails the match and falls through.
+		if (echoed < length && b == frame[echoed]) {
+			echoed++;
+			continue;
 		}
+
+		if (isConfirmation(b)) {
+			if (echoed != 0 && echoed != length) {
+				// Partial echo: the transceiver confirmed mid-echo, so the frame on the
+				// bus may differ from what was handed to sendTelegram().
+				KnxDebug::log("DRV !! echo %u/%u before con", (unsigned)echoed, (unsigned)length);
+			} else if (echoed == length) {
+				KnxDebug::log("DRV echo %u/%u ok", (unsigned)echoed, (unsigned)length);
+			}
+			// The con byte itself is logged: these are the spec-derived CON_* constants,
+			// the least verified part of the driver, so show the raw byte behind the verdict.
+			KnxDebug::log("DRV con byte 0x%02X -> %s", (unsigned)b,
+				isPositiveConfirmation(b) ? "positive" : "NEGATIVE");
+			return isPositiveConfirmation(b);
+		}
+		KnxDebug::log("DRV unexpected byte 0x%02X while awaiting con (echo %u/%u)",
+			(unsigned)b, (unsigned)echoed, (unsigned)length);
 	}
-	KnxDebug::log("DRV !! no con within %u ms", (unsigned)CON_TIMEOUT_MS);
+	KnxDebug::log("DRV !! no con within %u ms (echo %u/%u)",
+		(unsigned)CON_TIMEOUT_MS, (unsigned)echoed, (unsigned)length);
 	return false;   // no confirmation -> report failure, never a blind success
 }
 
@@ -137,7 +158,7 @@ bool KnxDriver::sendTelegram(const uint8_t* frame, uint8_t length) {
 		pair[1] = frame[i];
 		sendCommand(pair, sizeof(pair));
 	}
-	return awaitConfirmation();
+	return awaitConfirmation(frame, length);
 }
 
 bool KnxDriver::poll(uint8_t* out, uint8_t maxLen, uint8_t& outLen) {

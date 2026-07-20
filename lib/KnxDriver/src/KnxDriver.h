@@ -79,8 +79,8 @@ class KnxDriver : public IKnxDriver {
 		void applyPhysicalAddress(void);
 		// Flushes pending RX bytes.
 		void clearBuffer(void);
-		// Reads the post-transmission L_Data.con within CON_TIMEOUT_MS.
-		bool awaitConfirmation(void);
+		// Consumes the transmit echo, then reads the L_Data.con within CON_TIMEOUT_MS.
+		bool awaitConfirmation(const uint8_t* frame, uint8_t length);
 		// Classifies a byte as an L_Data.con and its polarity.
 		static bool isConfirmation(uint8_t b);
 		static bool isPositiveConfirmation(uint8_t b);
