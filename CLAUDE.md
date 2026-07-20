@@ -32,8 +32,9 @@ lib/Konnextor/      ← THE public surface, and nothing else: Konnextor.h — th
                       KnxDriver, built from the physical address). Header-only, Arduino-only.
 lib/KnxObject/      ← KnxObject : IKnxReceiver + intent classes (KnxLight, KnxDimmLight,
                       KnxRGB, KnxBlind, KnxTemperature, …) grouped by domain header. Header-only.
-lib/KnxCoordinator/ ← DI core class KnxCoordinator (KnxCoordinator.h): send(ga, KnxValue),
-                      intrusive IKnxReceiver registry, loop(); holds an injected IKnxDriver*
+lib/KnxCoordinator/ ← DI core class KnxCoordinator (KnxCoordinator.h): group send(ga, KnxValue)
+                      + intrusive IKnxReceiver registry, point-to-point sendIndividual/
+                      sendControl + one optional IKnxDeviceHandler, loop(); injected IKnxDriver*
 lib/KnxDriver/      ← concrete ATTiny / TP-UART UART driver : IKnxDriver (target-only)
 lib/KnxTelegram/    ← stateless L_Data framing + reassembler (KnxFrame, KnxReassembler);
                       Arduino-free, host-tested
@@ -84,9 +85,15 @@ coordinator, objects) against the Arduino-free layers; `pio run` builds the firm
 
 | Address | DPT | Direction | Purpose |
 |---|---|---|---|
-| 1/1/1 | DPT1 | OUT | `lamp` switching — the GA being toggled |
-| 0/1/1 | DPT1 | IN  | `lamp` switching status → `onLampChanged` callback |
+| 0/1/1 | DPT1 | OUT | `lamp` switching command — the GA being toggled |
+| 1/1/1 | DPT1 | IN  | `lamp` switching status → `onLampChanged` callback |
 | 0/2/1 | DPT5 | IN  | `brightness` status from the dimmer → `onBrightnessChanged` callback |
+
+The `lamp` object is `KnxLight lamp(knx, "0/1/1", "1/1/1")` — the ctor is
+`KnxLight(knx, commandGa, statusGa)`, so it *sends* to 0/1/1 and *listens* on 1/1/1. The bench
+log confirms it (`TX -> GA 0/1/1`). Note: several comments and `Serial.printf` strings inside
+`src/main.cpp` still say "1/1/1" for the toggled address — those are stale text, not a wiring
+change; the code is correct.
 
 Note 0/2/1 is a DPT5 **brightness status**, not a DPT3 relative-dim command GA — so the sketch
 uses `KnxLight` + a listen-only `KnxPercent`, not `KnxDimmLight` (whose third GA is a *send*
