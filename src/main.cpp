@@ -35,7 +35,7 @@
 Konnextor knx(PHYS_ADDR);
 
 //---- The light under test: (node, switching GA, status GA) ----
-// Sends on/off to 1/1/1, listens for switching status on 0/1/1.
+// Sends on/off to 0/1/1, listens for switching status on 1/1/1.
 KnxLight lamp(knx, "0/1/1", "1/1/1");
 
 //---- Brightness status published by the dimmer on 0/2/1 (DPT5, listen-only here) ----
@@ -54,7 +54,7 @@ void setup() {
 	Serial.begin(BAUDRATE_SERIAL);
 	while (!Serial && millis() < 3000) { }   // give USB CDC a moment, but never hang the board
 
-	Serial.println("\n[boot] KNX bench test — toggling 1/1/1 every 5 s");
+	Serial.println("\n[boot] KNX bench test — toggling 0/1/1 every 5 s");
 
 	// Must be set before begin() so the driver's own bring-up is traced too.
 	knx.enableDebugMode(KNX_VERBOSE);
@@ -83,16 +83,16 @@ void loop() {
 		// toggle() flips relative to the cached, status-fed state and returns the driver's
 		// real L_Data.con — "no ACK" here means the transceiver did not confirm the send.
 		bool confirmed = lamp.toggle();
-		Serial.printf("[send] toggle 1/1/1 -> %s (%s)\n",
+		Serial.printf("[send] toggle 0/1/1 -> %s (%s)\n",
 			lamp.isOn() ? "ON" : "OFF", confirmed ? "confirmed" : "no ACK");
 	}
 }
 
 //---- Handlers: run from knx.loop() when a matching telegram arrives ----
 
-// Switching status on 0/1/1, already decoded to a bool.
+// Switching status on 1/1/1, already decoded to a bool.
 void onLampChanged(bool on) {
-	Serial.printf("[bus]  status 0/1/1 -> lamp is %s\n", on ? "ON" : "OFF");
+	Serial.printf("[bus]  status 1/1/1 -> lamp is %s\n", on ? "ON" : "OFF");
 }
 
 // Brightness status on 0/2/1. The wire carries DPT5 raw 0..255; KnxPercent rescales to 0..100 %
@@ -107,12 +107,13 @@ void onBrightnessChanged(uint8_t percent) {
  *   no output at all          → serial/board problem, not KNX.
  *   "driver FAILED"           → ATTiny not answering the U_ reset handshake (wiring, baud, power).
  *   "no ACK" every cycle      → send path reaches the transceiver but no positive L_Data.con.
- *                               Suspect #1 is CON_MASK / CON_PATTERN / CON_POSITIVE in
- *                               KnxDriver.h — spec-derived and never hardware-verified.
+ *                               CON_MASK / CON_PATTERN / CON_POSITIVE in KnxDriver.h match the
+ *                               TP-UART2 datasheet and a 0x8B bench reading, so look past them
+ *                               to bus power, the ATTiny, or a genuinely NAK'd frame.
  *   "confirmed" but no [bus]  → TX works, RX does not: the actuator is not sending status, or
  *                               its status GAs differ, or reassembly/parse is failing.
- *   0/1/1 arrives, 0/2/1 not  → RX and dispatch are fine (one object matched); the dimmer is
+ *   1/1/1 arrives, 0/2/1 not  → RX and dispatch are fine (one object matched); the dimmer is
  *                               simply not publishing brightness, or not on 0/2/1.
  *   brightness always 0 / 100 → DPT5 decode or the 0..255 -> 0..100 rescale is suspect.
- *   [bus] but light unchanged → the telegram is fine; the actuator is not acting on 1/1/1.
+ *   [bus] but light unchanged → the telegram is fine; the actuator is not acting on 0/1/1.
  */
