@@ -87,13 +87,51 @@ void test_multibyte_frame(void) {
 	TEST_ASSERT_EQUAL_UINT8_ARRAY(built, out, blen);
 }
 
-//---- An invalid NPCI length (apduLen 1 -> frame < 9) is rejected, then recovers ----
-void test_invalid_length_recovers(void) {
+//---- A TPCI-only control PDU (8 bytes, LG = 0) reassembles ----
+// This replaces an earlier test that asserted an 8-byte frame was *invalid*. That held only
+// while MIN_FRAME was 9; TP1 §2.2.4.5 says length 0 ends after the sixth octet, and an 8-byte
+// frame is exactly what T_Connect/T_Disconnect/T_ACK look like.
+void test_control_pdu_reassembles(void) {
+	uint8_t built[KnxFrame::MAX_FRAME];
+	uint8_t blen = KnxFrame::buildControl(PhysicalAddress{ 1, 1, 5 },
+	                                      PhysicalAddress{ 1, 1, 7 },
+	                                      KnxTpci::Connect, 0, built, sizeof(built));
+	TEST_ASSERT_EQUAL_UINT8(8, blen);
+
 	KnxReassembler r;
-	// buffer[5]=0xE0 -> apduLen 1 -> expectedLen 8 (< MIN_FRAME) -> reset on the 6th byte.
-	const uint8_t bad[] = { 0xBC, 0x11, 0x05, 0x01, 0x01, 0xE0 };
-	TEST_ASSERT_EQUAL_INT(0, feedAll(r, bad, sizeof(bad), nullptr, nullptr));
-	// A valid frame afterwards still reassembles.
+	uint8_t out[32]; uint8_t len = 0;
+	TEST_ASSERT_EQUAL_INT(1, feedAll(r, built, blen, out, &len));
+	TEST_ASSERT_EQUAL_UINT8(blen, len);
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(built, out, blen);
+}
+
+//---- Every legal L_Data_Standard control byte starts a frame ----
+// The control field is '1 0 r 1 p1 p0 0 0' (TP1 Figure 28), so bit 5 (repeat) and bits 3..2
+// (priority) both vary: 0xB0/B4/B8/BC original, 0x90/94/98/9C repeated. Matching only 0xBC —
+// as this did before — dropped every retransmission and everything above low priority.
+void test_all_control_bytes_accepted(void) {
+	const uint8_t ctrls[] = { 0xB0, 0xB4, 0xB8, 0xBC, 0x90, 0x94, 0x98, 0x9C };
+	for (uint8_t i = 0; i < sizeof(ctrls); i++) {
+		uint8_t frame[sizeof(FRAME)];
+		for (uint8_t j = 0; j < sizeof(FRAME); j++) frame[j] = FRAME[j];
+		frame[0] = ctrls[i];
+
+		KnxReassembler r;
+		uint8_t out[32]; uint8_t len = 0;
+		TEST_ASSERT_EQUAL_INT(1, feedAll(r, frame, sizeof(frame), out, &len));
+		TEST_ASSERT_EQUAL_UINT8(sizeof(frame), len);
+		TEST_ASSERT_EQUAL_UINT8(ctrls[i], out[0]);
+	}
+}
+
+//---- Frame types that are not L_Data_Standard never start a frame ----
+void test_non_ldata_control_bytes_ignored(void) {
+	// 0xCC/0x0C/0xC0 acknowledge frames, 0xF0 poll, 0x3C/0x10 extended (frame type bit 7 = 0).
+	const uint8_t notLData[] = { 0xCC, 0x0C, 0xC0, 0x00, 0xF0, 0x3C, 0x10 };
+	KnxReassembler r;
+	TEST_ASSERT_EQUAL_INT(0, feedAll(r, notLData, sizeof(notLData), nullptr, nullptr));
+
+	// ...and a real frame after them still reassembles cleanly.
 	uint8_t out[32]; uint8_t len = 0;
 	TEST_ASSERT_EQUAL_INT(1, feedAll(r, FRAME, sizeof(FRAME), out, &len));
 	TEST_ASSERT_EQUAL_UINT8_ARRAY(FRAME, out, sizeof(FRAME));
@@ -106,6 +144,8 @@ int main(int, char**) {
 	RUN_TEST(test_split_delivery);
 	RUN_TEST(test_back_to_back);
 	RUN_TEST(test_multibyte_frame);
-	RUN_TEST(test_invalid_length_recovers);
+	RUN_TEST(test_control_pdu_reassembles);
+	RUN_TEST(test_all_control_bytes_accepted);
+	RUN_TEST(test_non_ldata_control_bytes_ignored);
 	return UNITY_END();
 }

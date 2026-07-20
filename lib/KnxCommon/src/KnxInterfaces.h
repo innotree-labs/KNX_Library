@@ -39,6 +39,27 @@ class IKnxDriver {
 };
 
 /**
+ * @brief Handler for telegrams addressed to this device by its individual address rather
+ *        than to a group — device management: a descriptor read ("ping"), a transport
+ *        connect/disconnect, ETS programming traffic.
+ *
+ *        Deliberately NOT an IKnxReceiver and deliberately not a registry: group telegrams
+ *        fan out to any number of intent objects that match a group address, whereas
+ *        point-to-point telegrams have exactly one legitimate recipient — this device. The
+ *        coordinator therefore holds a single optional handler pointer, and the intent-object
+ *        registry is left untouched (PLAN §6, §12).
+*/
+class IKnxDeviceHandler {
+	public:
+		virtual ~IKnxDeviceHandler() = default;
+
+		// Handle a telegram addressed to this device's individual address. The telegram's
+		// tpci field says whether it is connection control or data, and hasApci/apci carry
+		// the application service when there is one.
+		virtual void receiveIndividual(const ParsedTelegram& telegram) = 0;
+};
+
+/**
  * @brief A bus-event receiver that owns its listen address, DPT and cache, so it can
  *        decode an incoming telegram without the user restating either (PLAN §6).
  *        Nodes link themselves into the coordinator's intrusive registry via nextReceiver.

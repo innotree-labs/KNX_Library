@@ -15,9 +15,9 @@ void KnxReassembler::reset(void) {
 }
 
 bool KnxReassembler::feed(uint8_t byte) {
-	// Idle: wait for the standard-frame start byte, ignore everything else.
+	// Idle: wait for any legal L_Data_Standard control byte, ignore everything else.
 	if (!inFrame) {
-		if (byte != START_BYTE) return false;
+		if (!isControlByte(byte)) return false;
 		index       = 0;
 		expectedLen = 0;
 		inFrame     = true;

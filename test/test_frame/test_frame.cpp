@@ -23,7 +23,7 @@ void test_build_dpt1_layout(void) {
 	uint16_t ga = packGroupAddress(GroupAddress{ 0, 1, 1 });
 	uint8_t len = KnxFrame::build(SRC, ga, Dpt1(true), frame, sizeof(frame));
 	TEST_ASSERT_EQUAL_UINT8(9, len);                       // inline-6 frame + checksum
-	TEST_ASSERT_EQUAL_UINT8(0xBC, frame[0]);               // control: std, not-repeated, Normal
+	TEST_ASSERT_EQUAL_UINT8(0xBC, frame[0]);               // control: std, not-repeated, Low priority
 	TEST_ASSERT_EQUAL_UINT8((1 << 4) | 1, frame[1]);       // source area/line
 	TEST_ASSERT_EQUAL_UINT8(5, frame[2]);                  // source device
 	TEST_ASSERT_EQUAL_UINT8((0 << 3) | 1, frame[3]);       // target hi: main 0, middle 1 -> 0x01
@@ -153,6 +153,82 @@ void test_parse_raw_groupvalue_read(void) {
 	TEST_ASSERT_EQUAL_UINT8(0, tg.inline6Data);
 }
 
+//---- Address type: octet 5 bit 7 selects group vs individual addressing (TP1 §2.2.4.4) ----
+// Same skeleton twice, differing only in that bit; note the destination octets are identical,
+// so nothing but AT distinguishes "group 0/1/1" from "device 0.1.1".
+void test_parse_address_type_group(void) {
+	uint8_t raw[] = { 0xBC, 0x11, 0x05, 0x01, 0x01, 0xE1, 0x00, 0x81, 0x37 };
+	ParsedTelegram tg;
+	TEST_ASSERT_TRUE(KnxFrame::parse(raw, sizeof(raw), tg));
+	TEST_ASSERT_EQUAL_INT((int)KnxAddressType::Group, (int)tg.addressType);
+	TEST_ASSERT_EQUAL_INT((int)KnxTpci::DataGroup, (int)tg.tpci);
+	TEST_ASSERT_EQUAL_UINT8(1, tg.target.middle);
+	TEST_ASSERT_EQUAL_UINT8(1, tg.target.sub);
+}
+
+void test_parse_address_type_individual(void) {
+	// AT cleared (0xE1 -> 0x61) and the checksum recomputed over the changed octet.
+	uint8_t raw[] = { 0xBC, 0x11, 0x05, 0x01, 0x01, 0x61, 0x00, 0x81, 0x00 };
+	raw[8] = KnxFrame::checksum(raw, 8);
+	ParsedTelegram tg;
+	TEST_ASSERT_TRUE(KnxFrame::parse(raw, sizeof(raw), tg));
+	TEST_ASSERT_EQUAL_INT((int)KnxAddressType::Individual, (int)tg.addressType);
+	TEST_ASSERT_EQUAL_INT((int)KnxTpci::DataIndividual, (int)tg.tpci);
+	TEST_ASSERT_EQUAL_UINT8(0, tg.individualTarget.area);
+	TEST_ASSERT_EQUAL_UINT8(1, tg.individualTarget.line);
+	TEST_ASSERT_EQUAL_UINT8(1, tg.individualTarget.device);
+}
+
+//---- Every transport control PDU round-trips through build -> parse ----
+void test_control_pdu_roundtrip(void) {
+	struct Case { KnxTpci tpci; uint8_t seq; };
+	const Case cases[] = {
+		{ KnxTpci::Connect,    0 },
+		{ KnxTpci::Disconnect, 0 },
+		{ KnxTpci::Ack,        5 },
+		{ KnxTpci::Nak,        3 },
+	};
+
+	for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		uint8_t len = KnxFrame::buildControl(SRC, PhysicalAddress{ 1, 1, 7 },
+		                                     cases[i].tpci, cases[i].seq,
+		                                     frame, sizeof(frame));
+		TEST_ASSERT_EQUAL_UINT8(8, len);   // 6 header + TPCI + checksum
+
+		ParsedTelegram tg;
+		TEST_ASSERT_TRUE(KnxFrame::parse(frame, len, tg));
+		TEST_ASSERT_EQUAL_INT((int)KnxAddressType::Individual, (int)tg.addressType);
+		TEST_ASSERT_EQUAL_INT((int)cases[i].tpci, (int)tg.tpci);
+		TEST_ASSERT_FALSE(tg.hasApci);     // control PDUs carry no application service
+		if (cases[i].tpci == KnxTpci::Ack || cases[i].tpci == KnxTpci::Nak) {
+			TEST_ASSERT_EQUAL_UINT8(cases[i].seq, tg.sequenceNumber);
+		}
+	}
+}
+
+//---- A point-to-point data telegram round-trips with its APCI and payload ----
+void test_individual_apci_roundtrip(void) {
+	const uint8_t payload[] = { 0x12, 0x34 };
+	uint8_t len = KnxFrame::buildIndividual(SRC, PhysicalAddress{ 1, 1, 7 }, 0x300,
+	                                        payload, sizeof(payload), frame, sizeof(frame));
+	ParsedTelegram tg;
+	TEST_ASSERT_TRUE(KnxFrame::parse(frame, len, tg));
+	TEST_ASSERT_EQUAL_INT((int)KnxTpci::DataIndividual, (int)tg.tpci);
+	TEST_ASSERT_TRUE(tg.hasApci);
+	TEST_ASSERT_EQUAL_UINT16(0x300, tg.apci);
+	TEST_ASSERT_EQUAL_UINT8(sizeof(payload), tg.payloadLength);
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, tg.payload, sizeof(payload));
+	TEST_ASSERT_EQUAL_UINT8(1, tg.individualTarget.area);
+	TEST_ASSERT_EQUAL_UINT8(7, tg.individualTarget.device);
+}
+
+//---- buildControl refuses a TPCI that is not a control PDU ----
+void test_build_control_rejects_data_tpci(void) {
+	TEST_ASSERT_EQUAL_UINT8(0, KnxFrame::buildControl(SRC, PhysicalAddress{ 1, 1, 7 },
+	                                                  KnxTpci::DataGroup, 0,
+	                                                  frame, sizeof(frame)));
+}
+
 int main(int, char**) {
 	UNITY_BEGIN();
 	RUN_TEST(test_build_dpt1_layout);
@@ -166,5 +242,10 @@ int main(int, char**) {
 	RUN_TEST(test_parse_raw_groupvalue_write);
 	RUN_TEST(test_parse_raw_groupvalue_response);
 	RUN_TEST(test_parse_raw_groupvalue_read);
+	RUN_TEST(test_parse_address_type_group);
+	RUN_TEST(test_parse_address_type_individual);
+	RUN_TEST(test_control_pdu_roundtrip);
+	RUN_TEST(test_individual_apci_roundtrip);
+	RUN_TEST(test_build_control_rejects_data_tpci);
 	return UNITY_END();
 }

@@ -43,6 +43,25 @@ inline bool gaEqual(const GroupAddress& a, const GroupAddress& b) {
 	return a.main == b.main && a.middle == b.middle && a.sub == b.sub;
 }
 
+//---- Packed physical address (area[4] | line[4] | device[8]) ----
+// Same wire layout as the group address occupies in octets 3..4 of a frame; kept as a
+// symmetric pair so the framing layer never open-codes the shifts.
+inline uint16_t packPhysicalAddress(const PhysicalAddress& pa) {
+	return (uint16_t)(((pa.area & 0x0F) << 12) | ((pa.line & 0x0F) << 8) | pa.device);
+}
+
+inline PhysicalAddress unpackPhysicalAddress(uint16_t packed) {
+	PhysicalAddress pa;
+	pa.area   = (packed >> 12) & 0x0F;
+	pa.line   = (packed >> 8) & 0x0F;
+	pa.device = packed & 0xFF;
+	return pa;
+}
+
+inline bool paEqual(const PhysicalAddress& a, const PhysicalAddress& b) {
+	return a.area == b.area && a.line == b.line && a.device == b.device;
+}
+
 //---- String convenience helpers (Arduino only) ----
 #ifdef ARDUINO
 #include <Arduino.h>

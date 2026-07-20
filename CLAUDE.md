@@ -39,8 +39,8 @@ lib/KnxTelegram/    ← stateless L_Data framing + reassembler (KnxFrame, KnxRea
                       Arduino-free, host-tested
 lib/KnxValue/       ← value currency: KnxValue tagged union + symmetric KnxCodec. Pure
 lib/KnxCommon/      ← shared types + contracts: KnxEnums, KnxAddress, KnxTelegramTypes,
-                      KnxInterfaces (IKnxDriver / IKnxReceiver), KnxDebug (runtime
-                      logging switch used by every layer). Header-only
+                      KnxInterfaces (IKnxDriver / IKnxReceiver / IKnxDeviceHandler),
+                      KnxDebug (runtime logging switch used by every layer). Header-only
 examples/KNX_Device/← thesis button state machines (SingleButton/TwoButtonDimming, …);
                       NOT in the build, NOT part of the library surface (PLAN §12)
 ```

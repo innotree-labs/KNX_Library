@@ -40,12 +40,16 @@ enum class AcknowledgeInfo : uint8_t {
 	BUSY
 };
 
-//---- Telegram priority (control field bits) ----
+//---- Telegram priority (control field bits 3..2) ----
+// Values and names per KNX TP1 spec (03_02_02) Figure 28: p1p0 = 00 system,
+// 01 normal, 10 urgent, 11 low. The previous names were shifted by one — "High"
+// carried the normal-priority value and "Normal" carried the low-priority one.
+// Group communication conventionally runs at Low, which is KnxFrame::build's default.
 enum class KnxPriority : uint8_t {
-	System = 0x00,
-	Alarm  = 0x08,
-	High   = 0x04,
-	Normal = 0x0C
+	System = 0x00,	// p1p0 = 00 — reserved for system-critical traffic
+	Normal = 0x04,	// p1p0 = 01
+	Urgent = 0x08,	// p1p0 = 10 (formerly misnamed "Alarm")
+	Low    = 0x0C	// p1p0 = 11 — the default for group communication
 };
 
 //---- Group value service type ----
@@ -53,6 +57,29 @@ enum class GroupValueType : uint8_t {
 	Read,
 	Response,
 	Write,
+	Unknown
+};
+
+//---- Destination address type (control field octet 5, bit 7 "AT") ----
+// TP1 spec (03_02_02) §2.2.4.4: AT = 1 addresses a group, AT = 0 a single device by
+// its individual address (device management, e.g. a ping from ETS).
+enum class KnxAddressType : uint8_t {
+	Group,
+	Individual
+};
+
+//---- Transport control field (octet 6) ----
+// Transport Layer spec (03_03_04) Figure 3. Bit 7 = data/control flag, bit 6 = numbered,
+// bits 5..2 = sequence number, bits 1..0 = service (or the top two APCI bits on data PDUs).
+// Only the connectionless data PDUs carry an APCI; the control PDUs are TPCI-only frames.
+enum class KnxTpci : uint8_t {
+	DataGroup,        // AT = 1, unnumbered data — ordinary group communication
+	DataIndividual,   // AT = 0, unnumbered data — point-to-point connectionless
+	DataConnected,    // AT = 0, numbered data — inside a transport connection
+	Connect,          // 0x80 — open a transport connection
+	Disconnect,       // 0x81 — close a transport connection
+	Ack,              // 11 SeqNo 10
+	Nak,              // 11 SeqNo 11
 	Unknown
 };
 

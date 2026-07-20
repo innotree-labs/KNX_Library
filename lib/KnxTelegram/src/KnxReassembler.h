@@ -4,10 +4,10 @@
  * @date 16.07.2026
  * @authors Florian Wiesner
  * @details Reassembles a complete KNX standard frame from a byte stream. The driver feeds
- *          received bytes one at a time; the reassembler locks onto the 0xBC start byte,
- *          derives the frame length from the NPCI field, and signals when a full frame
- *          (through the checksum) is buffered — ready for KnxFrame::parse. Arduino-free and
- *          host-testable; this is the RX accumulation logic the old TP-UART checkUART owned.
+ *          received bytes one at a time; the reassembler locks onto an L_Data_Standard
+ *          control byte, derives the frame length from the NPCI field, and signals when a full
+ *          frame (through the checksum) is buffered — ready for KnxFrame::parse. Arduino-free
+ *          and host-testable; this is the RX accumulation logic the old TP-UART checkUART owned.
 */
 
 //---- Libraries ----
@@ -18,8 +18,23 @@ class KnxReassembler {
 		//---- Config ----
 		// Largest standard frame: 6-byte header + up to 16-octet APDU + checksum.
 		static constexpr uint8_t CAPACITY    = 6 + 16 + 1;
-		static constexpr uint8_t START_BYTE  = 0xBC;
-		static constexpr uint8_t MIN_FRAME   = 9;   // inline-6: 6 header + 2 APDU + checksum
+
+		// An L_Data_Standard control field is '1 0 r 1 p1 p0 0 0' (TP1 spec 03_02_02,
+		// Figure 28): bit 5 is the repeat flag and bits 3..2 the priority, so eight byte
+		// values are legal — 0xB0/B4/B8/BC (original) and 0x90/94/98/9C (repeated). Matching
+		// the single value 0xBC, as this did before, silently dropped every repeated frame
+		// (i.e. exactly the retransmission sent after a lost original) and everything not at
+		// low priority. Mask off the five invariant bits (7,6,4,1,0) and compare instead;
+		// this also still rejects extended (bit 7 = 0), acknowledge and poll frames.
+		static constexpr uint8_t CTRL_MASK    = 0xD3;
+		static constexpr uint8_t CTRL_PATTERN = 0x90;
+
+		// Shortest legal frame is a TPCI-only control PDU (T_Connect/T_Disconnect/T_ACK):
+		// 6 header + 1 TPCI + checksum. TP1 §2.2.4.5 — length 0 ends after the sixth octet.
+		static constexpr uint8_t MIN_FRAME   = 8;
+
+		// True if b can start an L_Data_Standard frame.
+		static bool isControlByte(uint8_t b) { return (b & CTRL_MASK) == CTRL_PATTERN; }
 
 		//---- Members ----
 		uint8_t buffer[CAPACITY];

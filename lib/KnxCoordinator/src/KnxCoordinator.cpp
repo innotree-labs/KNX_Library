@@ -27,6 +27,38 @@ bool KnxCoordinator::send(uint16_t groupAddress, const KnxValue& value) {
 	return confirmed;
 }
 
+bool KnxCoordinator::sendIndividual(PhysicalAddress target, uint16_t apci,
+                                    const uint8_t* payload, uint8_t payloadLength) {
+	KnxDebug::log("TX  -> %u.%u.%u, APCI 0x%03X",
+		(unsigned)target.area, (unsigned)target.line, (unsigned)target.device, (unsigned)apci);
+
+	uint8_t frame[KnxFrame::MAX_FRAME];
+	uint8_t len = KnxFrame::buildIndividual(physicalAddress, target, apci,
+		payload, payloadLength, frame, sizeof(frame));
+	if (len == 0) {
+		KnxDebug::log("TX  !! individual build failed");
+		return false;
+	}
+
+	bool confirmed = p_driver->sendTelegram(frame, len);
+	KnxDebug::log("TX  %s", confirmed ? "confirmed (L_Data.con)" : "!! NOT confirmed");
+	return confirmed;
+}
+
+bool KnxCoordinator::sendControl(PhysicalAddress target, KnxTpci tpci, uint8_t sequenceNumber) {
+	uint8_t frame[KnxFrame::MAX_FRAME];
+	uint8_t len = KnxFrame::buildControl(physicalAddress, target, tpci, sequenceNumber,
+		frame, sizeof(frame));
+	if (len == 0) {
+		KnxDebug::log("TX  !! control build failed");
+		return false;
+	}
+
+	bool confirmed = p_driver->sendTelegram(frame, len);
+	KnxDebug::log("TX  %s", confirmed ? "confirmed (L_Data.con)" : "!! NOT confirmed");
+	return confirmed;
+}
+
 //---- Receiver registry (intrusive singly-linked list) ----
 
 void KnxCoordinator::registerReceiver(IKnxReceiver* receiver) {
@@ -52,6 +84,13 @@ void KnxCoordinator::unregisterReceiver(IKnxReceiver* receiver) {
 }
 
 void KnxCoordinator::dispatch(const ParsedTelegram& telegram) {
+	// A group telegram whose APDU stops after the TPCI octet carries no application service,
+	// so there is nothing for a receiver to decode. Structurally legal, semantically empty.
+	if (!telegram.hasApci) {
+		KnxDebug::log("RX  -- group telegram without APCI, ignored");
+		return;
+	}
+
 	uint16_t ga = packGroupAddress(telegram.target);
 
 	uint8_t delivered = 0;
@@ -71,6 +110,21 @@ void KnxCoordinator::dispatch(const ParsedTelegram& telegram) {
 		(unsigned)telegram.target.sub, (unsigned)delivered);
 }
 
+void KnxCoordinator::dispatchIndividual(const ParsedTelegram& telegram) {
+	// Point-to-point telegrams have exactly one legitimate recipient. Anything not addressed
+	// to us is ordinary foreign traffic on a shared bus, not an error.
+	bool forUs = paEqual(telegram.individualTarget, physicalAddress);
+
+	KnxDebug::log("RX  <- %u.%u.%u to device %u.%u.%u, TPCI %u -> %s",
+		(unsigned)telegram.source.area, (unsigned)telegram.source.line,
+		(unsigned)telegram.source.device,
+		(unsigned)telegram.individualTarget.area, (unsigned)telegram.individualTarget.line,
+		(unsigned)telegram.individualTarget.device, (unsigned)telegram.tpci,
+		!forUs ? "not for us" : (p_deviceHandler ? "device handler" : "no handler"));
+
+	if (forUs && p_deviceHandler) p_deviceHandler->receiveIndividual(telegram);
+}
+
 //---- Receiving ----
 
 bool KnxCoordinator::loop(void) {
@@ -87,7 +141,12 @@ bool KnxCoordinator::loop(void) {
 			continue;
 		}
 
-		dispatch(telegram);
+		if (telegram.addressType == KnxAddressType::Individual) {
+			dispatchIndividual(telegram);
+		}
+		else {
+			dispatch(telegram);
+		}
 		processed = true;
 	}
 	return processed;

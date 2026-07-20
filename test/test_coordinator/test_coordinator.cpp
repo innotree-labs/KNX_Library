@@ -67,6 +67,21 @@ class TestReceiver : public IKnxReceiver {
 		}
 };
 
+class TestDeviceHandler : public IKnxDeviceHandler {
+	public:
+		int      receiveCount = 0;
+		KnxTpci  lastTpci = KnxTpci::Unknown;
+		uint16_t lastApci = 0;
+		bool     lastHadApci = false;
+
+		void receiveIndividual(const ParsedTelegram& tg) override {
+			receiveCount++;
+			lastTpci    = tg.tpci;
+			lastApci    = tg.apci;
+			lastHadApci = tg.hasApci;
+		}
+};
+
 static const PhysicalAddress SELF = { 1, 1, 5 };
 
 void setUp(void) {}
@@ -175,6 +190,79 @@ void test_registry_idempotent_and_unregister(void) {
 	TEST_ASSERT_EQUAL_INT(1, rx.receiveCount);   // no longer registered
 }
 
+//---- A telegram addressed to OUR individual address reaches the device handler ----
+void test_individual_to_us_reaches_handler(void) {
+	MockDriver mock;
+	KnxCoordinator knx(&mock, SELF);
+	TestDeviceHandler handler;
+	knx.setDeviceHandler(&handler);
+
+	// A_DeviceDescriptor_Read (APCI 0x300) from 1.1.9 to us — an ETS-style ping.
+	uint8_t frame[KnxFrame::MAX_FRAME];
+	uint8_t n = KnxFrame::buildIndividual(PhysicalAddress{ 1, 1, 9 }, SELF,
+	                                      0x300, nullptr, 0, frame, sizeof(frame));
+	mock.queueFrame(frame, n);
+
+	TEST_ASSERT_TRUE(knx.loop());
+	TEST_ASSERT_EQUAL_INT(1, handler.receiveCount);
+	TEST_ASSERT_TRUE(handler.lastHadApci);
+	TEST_ASSERT_EQUAL_UINT16(0x300, handler.lastApci);
+	TEST_ASSERT_EQUAL_INT((int)KnxTpci::DataIndividual, (int)handler.lastTpci);
+}
+
+//---- The same telegram addressed to a different device is foreign traffic ----
+void test_individual_to_other_device_ignored(void) {
+	MockDriver mock;
+	KnxCoordinator knx(&mock, SELF);
+	TestDeviceHandler handler;
+	knx.setDeviceHandler(&handler);
+
+	uint8_t frame[KnxFrame::MAX_FRAME];
+	uint8_t n = KnxFrame::buildIndividual(PhysicalAddress{ 1, 1, 9 },
+	                                      PhysicalAddress{ 1, 1, 7 },
+	                                      0x300, nullptr, 0, frame, sizeof(frame));
+	mock.queueFrame(frame, n);
+
+	TEST_ASSERT_TRUE(knx.loop());          // consumed...
+	TEST_ASSERT_EQUAL_INT(0, handler.receiveCount);   // ...but not delivered
+}
+
+//---- Point-to-point telegrams must never leak into the group receiver registry ----
+// The group and individual address spaces overlap numerically: 1.1.5 packs to the same
+// uint16_t as group address 2/1/5, so routing by address type is what keeps them apart.
+void test_individual_never_reaches_group_registry(void) {
+	MockDriver mock;
+	KnxCoordinator knx(&mock, SELF);
+	TestReceiver receiver(packPhysicalAddress(SELF));   // same packed value as our address
+	knx.registerReceiver(&receiver);
+
+	uint8_t frame[KnxFrame::MAX_FRAME];
+	uint8_t n = KnxFrame::buildIndividual(PhysicalAddress{ 1, 1, 9 }, SELF,
+	                                      0x300, nullptr, 0, frame, sizeof(frame));
+	mock.queueFrame(frame, n);
+
+	TEST_ASSERT_TRUE(knx.loop());
+	TEST_ASSERT_EQUAL_INT(0, receiver.receiveCount);
+}
+
+//---- A TPCI-only control PDU reaches the handler with no APCI ----
+void test_control_pdu_reaches_handler(void) {
+	MockDriver mock;
+	KnxCoordinator knx(&mock, SELF);
+	TestDeviceHandler handler;
+	knx.setDeviceHandler(&handler);
+
+	uint8_t frame[KnxFrame::MAX_FRAME];
+	uint8_t n = KnxFrame::buildControl(PhysicalAddress{ 1, 1, 9 }, SELF,
+	                                   KnxTpci::Connect, 0, frame, sizeof(frame));
+	mock.queueFrame(frame, n);
+
+	TEST_ASSERT_TRUE(knx.loop());
+	TEST_ASSERT_EQUAL_INT(1, handler.receiveCount);
+	TEST_ASSERT_FALSE(handler.lastHadApci);
+	TEST_ASSERT_EQUAL_INT((int)KnxTpci::Connect, (int)handler.lastTpci);
+}
+
 int main(int, char**) {
 	UNITY_BEGIN();
 	RUN_TEST(test_send_con_true);
@@ -184,5 +272,9 @@ int main(int, char**) {
 	RUN_TEST(test_drain_loop_two_frames);
 	RUN_TEST(test_match_selectivity);
 	RUN_TEST(test_registry_idempotent_and_unregister);
+	RUN_TEST(test_individual_to_us_reaches_handler);
+	RUN_TEST(test_individual_to_other_device_ignored);
+	RUN_TEST(test_individual_never_reaches_group_registry);
+	RUN_TEST(test_control_pdu_reaches_handler);
 	return UNITY_END();
 }

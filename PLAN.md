@@ -339,6 +339,86 @@ call is one bool test. No compile-time strip switch exists yet — add one only 
 ever needs it, on the strength of a measurement rather than speculation. Note arguments are
 still evaluated when logging is off; expensive call sites use `if (KnxDebug::isEnabled())`.
 
+## 10c. Spec conformance pass (as-built — after a read of the KNX v3.0.0 specs)
+
+The KNX Standard v3.0.0 PDFs now live in `docs/`. Reading `03_02_02 Communication Medium TP1`
+§2.2 and `03_03_04 Transport Layer` §2 against the framing layer turned up three deviations,
+all since fixed, plus one deferral recorded here.
+
+**Fixed — frame sync accepted 1 of 8 legal control bytes.** `KnxReassembler` exact-matched
+`0xBC`. An L_Data_Standard control field is `1 0 r 1 p1 p0 0 0` (TP1 Figure 28): bit 5 is the
+repeat flag and bits 3..2 the priority, so eight values are legal — `0xB0/B4/B8/BC` original and
+`0x90/94/98/9C` repeated. The old code therefore dropped **every repeated frame** — i.e. exactly
+the retransmission a sender emits after a lost or NAKed original — and everything above low
+priority. Now masked: `(ctrl & 0xD3) == 0x90`, which still rejects extended, acknowledge and
+poll frames. `MIN_FRAME` also dropped 9 → 8, because TP1 §2.2.4.5 allows length 0 (a frame
+ending after octet 6) and that is exactly the shape of a `T_Connect`.
+
+**Fixed — `KnxPriority` names were shifted by one.** Spec values (bits 3..2) are system `00`,
+normal `01`, urgent `10`, low `11`. The enum had `High = 0x04` (really *normal*) and
+`Normal = 0x0C` (really *low*), with no name for low at all. Renamed to
+`System/Normal/Urgent/Low`. **Wire behaviour is deliberately unchanged:** `KnxFrame::build`'s
+default moved from the old `Normal` (0x0C) to the new `Low` (0x0C), the same byte, so group
+communication still goes out at low priority and the control byte is still `0xBC`.
+
+**Fixed — individual (point-to-point) addressing was unimplemented.** `parse()` ignored octet 5
+bit 7 (AT) and unpacked every destination as a group address, so a telegram addressed to *this
+device* — a descriptor-read ping, a transport connect, ETS programming traffic — was misparsed
+as group traffic. See §10d for the structure.
+
+**Deferred — L_Data_Extended frames (frame type bit 7 = 0).** Not reassembled, not parsed, by
+choice. TP1 §2.2.5 uses them for APDUs > 15 octets and for LTE-HEE extended addressing; a
+group-communication library for switching, dimming, blinds and scalars never needs one, and
+supporting them means a second length rule (8-bit LG with an `0xFF` escape), a CTRLE octet and
+a larger RX buffer. The mask above rejects them cleanly rather than misparsing them. Revisit if
+a DPT beyond 14 octets or LTE mode is ever wanted.
+
+**Open, not a defect — no link-layer ACK generation.** `U_ACK_INFO_ACK/BUSY/NACK` are declared
+in `KnxDriver.h` and never sent, so the stack never emits the acknowledge frame of TP1 §2.2.7.
+Whether that is a bug depends on the TP-UART auto-ACKing addressed frames once `U_SetAddress`
+is applied — that is Siemens datasheet behaviour, not settled by these specs. Bench evidence so
+far is consistent with auto-ACK (status telegrams arrive with no repeat storm). Verify against
+the datasheet before acting.
+
+Confirmed correct while reading, worth not re-litigating: the checksum is NOT-XOR (odd parity)
+as in TP1 Figure 31; `LG = APDU octets - 1` matches real bus traffic; hop count 6 is the
+conventional Network Layer default; `KnxPercent`'s DPT 5.001 scaling matches the spec table
+(50 % → `0x80`, 100 % → `0xFF`); and Session and Presentation layers are *empty* in KNX
+(`03_03_05`, `03_03_06`), so having no L5/L6 is conformance, not a gap.
+
+## 10d. Point-to-point addressing (as-built — structure)
+
+The constraint was to add device-management addressing **without disturbing the group path**,
+which is the whole existing library surface. What that ruled out and what it produced:
+
+- **`ParsedTelegram` grew, it did not change.** `target`, `type`, `payload` and the inline-6
+  fields keep their names, positions and meaning, so every existing consumer compiles and
+  behaves identically. Added alongside them: `addressType`, `individualTarget`, `tpci`,
+  `sequenceNumber`, `apci`, `hasApci`. `addressType` discriminates which destination field is
+  live.
+- **`IKnxReceiver` was left alone.** Widening `matches(uint16_t)` to carry an address type would
+  have touched every intent class for a case none of them care about. Instead `KnxCommon` gained
+  a separate `IKnxDeviceHandler`, and the coordinator holds **one optional pointer** to it — not
+  a registry, because a point-to-point telegram has exactly one legitimate recipient (this
+  device), unlike a group address which legitimately fans out.
+- **Routing happens in `KnxCoordinator::loop()`**, which branches on `addressType` to either the
+  existing group `dispatch()` or the new `dispatchIndividual()`. The latter compares the target
+  against this device's physical address; anything else is foreign traffic and is logged, not
+  delivered. This separation is load-bearing: the two address spaces overlap numerically — 1.1.5
+  packs to the same `uint16_t` as group address 2/1/5 — so type, not value, is what keeps a
+  point-to-point telegram out of the group registry. There is a test for exactly that.
+- **Framing gained `buildIndividual()` (T_Data_Individual + raw APCI) and `buildControl()`**
+  (TPCI-only T_Connect/T_Disconnect/T_ACK/T_NAK), with the octet 0..5 header writer factored out
+  so the three builders cannot drift apart. TPCI decoding follows Transport Layer Figure 3.
+- **No transport state machine.** `03_03_04` §5 specifies a full connection-oriented state
+  machine (connect/ack/seqno/timeout/repeat). Deliberately not implemented: the plumbing above
+  makes point-to-point telegrams parseable, routable and sendable, which is what a ping needs.
+  A device that wants to *hold* an ETS connection needs §5, and that is a separate piece of work.
+
+Application-service codes come from `03_03_07` Application Layer §3: `A_DeviceDescriptor_Read`
+is APCI `0x300`, `A_Restart` `0x380`. `apci` is exposed raw rather than enumerated, because the
+table is long and device management is not the library's focus — the caller names what it needs.
+
 ## 11. Note: CLAUDE.md physical-layer section updated
 
 DONE (this session, commit `4b37b30`): `CLAUDE.md`'s old "Planned migration:

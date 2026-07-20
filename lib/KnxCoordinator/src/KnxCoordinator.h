@@ -39,11 +39,16 @@ class KnxCoordinator {
 		IKnxDriver*    p_driver;                 // injected link-layer driver
 		PhysicalAddress physicalAddress;         // frame source address
 		IKnxReceiver*  receiverHead = nullptr;   // intrusive registry head
+		IKnxDeviceHandler* p_deviceHandler = nullptr;   // optional point-to-point handler
 		uint8_t        rxFrame[RX_BUFFER_SIZE];
 
 		//---- Methods ----
 		// Walks the receiver registry and delivers a parsed telegram to every match.
 		void dispatch(const ParsedTelegram& telegram);
+
+		// Routes a telegram addressed to an individual address: ours goes to the device
+		// handler, anyone else's is foreign traffic.
+		void dispatchIndividual(const ParsedTelegram& telegram);
 
 	public:
 		//---- Constructor ----
@@ -89,6 +94,39 @@ class KnxCoordinator {
 		 * @param receiver Receiver to remove.
 		*/
 		void unregisterReceiver(IKnxReceiver* receiver);
+
+		/**
+		 * @brief Installs the handler for telegrams addressed to this device's individual
+		 *        address (device management: descriptor read / "ping", transport connect,
+		 *        ETS programming). Without one such telegrams are parsed and logged but
+		 *        not acted on, which is the default behaviour of a pure group-comms node.
+		 * @param handler Handler to install, or nullptr to remove; not owned, must outlive
+		 *                the coordinator.
+		*/
+		void setDeviceHandler(IKnxDeviceHandler* handler) { p_deviceHandler = handler; }
+
+		//---- Point-to-point sending ----
+		/**
+		 * @brief Sends a point-to-point connectionless telegram carrying a raw APCI to one
+		 *        device — e.g. apci 0x300 (A_DeviceDescriptor_Read) to ping it.
+		 * @param target        Physical address of the addressed device.
+		 * @param apci          Raw 10-bit APCI.
+		 * @param payload       Optional APDU payload after the APCI (may be nullptr).
+		 * @param payloadLength Number of payload bytes.
+		 * @return true if the driver returned a positive L_Data.con.
+		*/
+		bool sendIndividual(PhysicalAddress target, uint16_t apci,
+		                    const uint8_t* payload = nullptr, uint8_t payloadLength = 0);
+
+		/**
+		 * @brief Sends a TPCI-only transport control telegram (T_Connect, T_Disconnect,
+		 *        T_ACK, T_NAK) to one device.
+		 * @param target         Physical address of the addressed device.
+		 * @param tpci           Control PDU to emit.
+		 * @param sequenceNumber Sequence number for Ack/Nak; ignored otherwise.
+		 * @return true if the driver returned a positive L_Data.con.
+		*/
+		bool sendControl(PhysicalAddress target, KnxTpci tpci, uint8_t sequenceNumber = 0);
 
 		/**
 		 * @brief Services the KNX stack: call this every Arduino loop() iteration. It drains every
