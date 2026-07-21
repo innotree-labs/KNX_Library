@@ -86,7 +86,8 @@ HTML_EXTRA_STYLESHEET  = doxygen-theme/doxygen-awesome.css \
                          doxygen-theme/site-style.css \
                          doxygen-theme/site-chrome-override.css
 HTML_EXTRA_FILES       = doxygen-theme/fonts/bootstrap-icons.woff \
-                         doxygen-theme/fonts/bootstrap-icons.woff2
+                         doxygen-theme/fonts/bootstrap-icons.woff2 \
+                         doxygen-theme/bootstrap.bundle.min.js
 
 #---- Warnings: use these to verify every public member is documented ----
 QUIET                  = YES
