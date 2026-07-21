@@ -3,17 +3,11 @@
  * @name KnxObject.h
  * @date 18.07.2026
  * @authors Florian Wiesner
- * @details Stateful base object (PLAN §5-7). A KnxObject knows its own command GA, status
- *          (listen) GA and DPT, so it can decode an incoming telegram without the user
- *          restating either. It self-registers into the coordinator's intrusive IKnxReceiver
- *          registry on construction and unlinks in its destructor, so a scoped object can
- *          never dangle. write() sends through the one KNX::send() encode path and
- *          optimistically updates the cache; receive() overwrites it authoritatively from the
- *          bus. Intent subclasses (KnxLight, ...) hide the DPT behind intent methods and
- *          translate the cached value into a typed callback via the onValueUpdated() hook.
- *
- *          Header-only by design: the LDF compiles every .cpp in a pulled library, so keeping
- *          this Arduino-bound layer .cpp-free keeps the native codec tests green.
+ * @details The generic device object, for datapoints without a dedicated class (KnxLight,
+ *          KnxTemperature, …). Give it a group address and a datapoint type; then write() sends
+ *          a value, value() reads back the last one, and onUpdate() notifies you when a new value
+ *          arrives on the bus. The dedicated device classes are built on top of this and hide the
+ *          datapoint type behind named methods.
 */
 
 //---- Standard / platform libraries ----
@@ -26,9 +20,10 @@
 #include "KnxDebug.h"     // library-wide verbose logging
 
 /**
- * @brief Raw KNX object tier: a receiver bound to one status GA / DPT with a value cache and a
- *        generic KnxValue callback. Covers datapoints not wrapped by an intent class — the user
- *        supplies the DPT once and gets generic write()/onUpdate() methods.
+ * @brief A generic device object for any datapoint type. Supply the datapoint type once at
+ *        construction, then use write() to send a value, value() to read the last one, and
+ *        onUpdate() to be notified of changes. Use this for datapoints the named device classes
+ *        (KnxLight, KnxTemperature, …) do not cover.
 */
 class KnxObject : public IKnxReceiver {
 	protected:
@@ -50,11 +45,11 @@ class KnxObject : public IKnxReceiver {
 	public:
 		//---- Constructors ----
 		/**
-		 * @brief Constructs an object with distinct command and status group addresses.
-		 * @param knx       Coordinator to send through and register with (must outlive this).
-		 * @param cmdGa      Packed group address writes are sent to.
-		 * @param statusGa   Packed group address this object listens on for feedback.
-		 * @param dpt        Datapoint type used to encode writes and decode receives.
+		 * @brief Creates an object that sends on one group address and reads status on another.
+		 * @param knx       The bus node this object belongs to.
+		 * @param cmdGa      Group address values are sent to.
+		 * @param statusGa   Group address this object reads status on.
+		 * @param dpt        Datapoint type of the values sent and received.
 		*/
 		KnxObject(KnxCoordinator& knx, uint16_t cmdGa, uint16_t statusGa, KnxDpt dpt)
 			: p_knx(&knx), commandGa(cmdGa), statusGa(statusGa), objectDpt(dpt) {
@@ -62,19 +57,25 @@ class KnxObject : public IKnxReceiver {
 		}
 
 		/**
-		 * @brief Constructs an object whose status GA defaults to its command GA.
+		 * @brief Creates an object that uses one group address to send and read status.
+		 * @param knx  The bus node this object belongs to.
+		 * @param ga   Group address used to send and to read status.
+		 * @param dpt  Datapoint type of the values sent and received.
 		*/
 		KnxObject(KnxCoordinator& knx, uint16_t ga, KnxDpt dpt)
 			: KnxObject(knx, ga, ga, dpt) {}
 
-		//---- Destructor: unlink from the registry so a scoped object cannot dangle ----
 		~KnxObject() override { p_knx->unregisterReceiver(this); }
 
 		//---- IKnxReceiver ----
+		/** @brief Called by the bus node to test whether this object handles a group address.
+		 *  You do not call this yourself. */
 		bool matches(uint16_t packedGroupAddress) const override {
 			return packedGroupAddress == statusGa;
 		}
 
+		/** @brief Called by the bus node to deliver a matching telegram to this object.
+		 *  You do not call this yourself. */
 		void receive(const ParsedTelegram& telegram) override {
 			const uint8_t* in;
 			uint8_t inLen;
@@ -97,9 +98,9 @@ class KnxObject : public IKnxReceiver {
 
 		//---- Sending ----
 		/**
-		 * @brief Encodes and transmits a value to the command GA, updating the cache optimistically.
-		 * @param value Value to send; only cached if its DPT matches this object's DPT.
-		 * @return The driver's L_Data.con result (PLAN §9).
+		 * @brief Sends a value to this object's group address.
+		 * @param value Value to send; it must match this object's datapoint type.
+		 * @return true if the bus confirmed the send.
 		*/
 		bool write(const KnxValue& value) {
 			// Optimistic cache: lets toggle/read-back work before status feedback arrives; a
@@ -110,21 +111,36 @@ class KnxObject : public IKnxReceiver {
 
 		//---- Reading ----
 		/**
-		 * @brief Last known value with no bus traffic (send-optimistic or status-fed).
+		 * @brief The last value sent or received, with no bus traffic.
+		 * @return The cached value.
 		*/
 		KnxValue value(void) const { return cachedValue; }
 
 		/**
-		 * @brief Registers a generic callback fired with the decoded value on every status update.
+		 * @brief Registers a function to call whenever a new value arrives on the bus.
+		 * @param callback Called with the decoded value. Pass nullptr to remove it.
 		*/
 		void onUpdate(void (*callback)(const KnxValue&)) { p_onValue = callback; }
 
 // ================= Arduino String conveniences (config-time only) =================
 #ifdef ARDUINO
 	public:
+		/**
+		 * @brief Creates an object that sends on one group address and reads status on another.
+		 * @param knx       The bus node this object belongs to.
+		 * @param cmdGa      Command group address as "main/middle/sub".
+		 * @param statusGa   Status group address as "main/middle/sub".
+		 * @param dpt        Datapoint type of the values sent and received.
+		*/
 		KnxObject(KnxCoordinator& knx, String cmdGa, String statusGa, KnxDpt dpt)
 			: KnxObject(knx, packedGroupAddressFromString(cmdGa),
 			            packedGroupAddressFromString(statusGa), dpt) {}
+		/**
+		 * @brief Creates an object that uses one group address to send and read status.
+		 * @param knx  The bus node this object belongs to.
+		 * @param ga   Group address as "main/middle/sub".
+		 * @param dpt  Datapoint type of the values sent and received.
+		*/
 		KnxObject(KnxCoordinator& knx, String ga, KnxDpt dpt)
 			: KnxObject(knx, packedGroupAddressFromString(ga), dpt) {}
 #endif

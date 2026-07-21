@@ -3,17 +3,14 @@
  * @name KnxCoordinator.h
  * @date 18.07.2026
  * @authors Florian Wiesner
- * @details High-level KNX coordinator (the dependency-injection core). Owns an injected
- *          link-layer driver (IKnxDriver), assembles outgoing telegrams from a KnxValue via
- *          KnxFrame, and dispatches incoming telegrams to an intrusive list of IKnxReceiver
- *          objects that decode with their own DPT (PLAN §5–7). Arduino-free and depends only on
- *          the driver interface, so it is host-testable with a mock driver.
+ * @details The KNX bus node. It sends values to group addresses, receives telegrams and delivers
+ *          them to the device objects attached to it, and exposes begin(), loop() and the debug
+ *          switch a sketch calls on its `knx` object.
  *
- *          This is the class intent objects reference (KnxCoordinator&). End-user sketches use
- *          the `Konnextor` facade (Konnextor.h) — a thin Arduino subclass that owns a KnxDriver and
- *          is built from a physical-address string — so the driver is hidden without giving up
- *          the injectable, testable core here. The String ctor + stateless String send() tier are
- *          Arduino conveniences confined to #ifdef ARDUINO.
+ *          Most sketches never name this class directly: they create a `Konnextor` (Konnextor.h),
+ *          which is a KnxCoordinator that also owns its bus driver, so the driver is set up for
+ *          you. Use KnxCoordinator directly only for the advanced case of supplying your own
+ *          driver (IKnxDriver) — for example a custom transceiver or a mock in a host test.
 */
 
 //---- Standard / platform libraries ----
@@ -53,105 +50,106 @@ class KnxCoordinator {
 	public:
 		//---- Constructor ----
 		/**
-		 * @brief Constructs the coordinator around an injected driver and this device's address.
-		 * @param driver          Link-layer driver (not owned; must outlive the coordinator).
-		 * @param physicalAddress Physical address of this device (frame source).
+		 * @brief Advanced: creates a bus node driven by a bus driver you provide. Most sketches
+		 *        use Konnextor instead, which supplies the driver for you.
+		 * @param driver          The bus driver to use; not owned, and must outlive this node.
+		 * @param physicalAddress This device's physical address.
 		*/
 		KnxCoordinator(IKnxDriver* driver, PhysicalAddress physicalAddress)
 			: p_driver(driver), physicalAddress(physicalAddress) {}
 
-		//---- Lifecycle (delegated to the driver) ----
+		//---- Lifecycle ----
 		/**
-		 * @brief Brings the link layer up.
-		 * @return true if the driver initialised successfully.
+		 * @brief Starts the bus connection. Call once in setup().
+		 * @return true if the bus came up successfully.
 		*/
 		bool begin(void) { return p_driver->begin(); }
 
 		/**
-		 * @brief Resets the link layer.
+		 * @brief Restarts the bus connection.
 		 * @return true if the reset succeeded.
 		*/
 		bool reset(void) { return p_driver->reset(); }
 
 		//---- Sending ----
 		/**
-		 * @brief Encodes a value and transmits it to a packed group address.
-		 * @param groupAddress Packed destination group address.
-		 * @param value        Typed value to send.
-		 * @return true if the driver returned a positive L_Data.con (PLAN §9).
+		 * @brief Sends a value to a group address.
+		 * @param groupAddress Destination group address.
+		 * @param value        The value to send.
+		 * @return true if the bus confirmed the send.
 		*/
 		bool send(uint16_t groupAddress, const KnxValue& value);
 
 		//---- Receiving ----
 		/**
-		 * @brief Links a receiver into the intrusive registry (idempotent).
-		 * @param receiver Receiver to register; not owned, must outlive the coordinator.
+		 * @brief Attaches a device object so it receives matching telegrams. Objects do this
+		 *        themselves when created, so you rarely call it directly.
+		 * @param receiver The object to attach; not owned, and must outlive this node.
 		*/
 		void registerReceiver(IKnxReceiver* receiver);
 
 		/**
-		 * @brief Unlinks a receiver from the registry (safe if not registered).
-		 * @param receiver Receiver to remove.
+		 * @brief Detaches a device object (safe if it was not attached). Objects do this
+		 *        themselves when destroyed.
+		 * @param receiver The object to detach.
 		*/
 		void unregisterReceiver(IKnxReceiver* receiver);
 
 		/**
-		 * @brief Installs the handler for telegrams addressed to this device's individual
-		 *        address (device management: descriptor read / "ping", transport connect,
-		 *        ETS programming). Without one such telegrams are parsed and logged but
-		 *        not acted on, which is the default behaviour of a pure group-comms node.
-		 * @param handler Handler to install, or nullptr to remove; not owned, must outlive
-		 *                the coordinator.
+		 * @brief Advanced: installs a handler for telegrams sent to this device by its physical
+		 *        address (device management, such as a ping from ETS). Without one, such
+		 *        telegrams are ignored.
+		 * @param handler The handler to install, or nullptr to remove it; not owned, and must
+		 *                outlive this node.
 		*/
 		void setDeviceHandler(IKnxDeviceHandler* handler) { p_deviceHandler = handler; }
 
-		//---- Point-to-point sending ----
+		//---- Point-to-point sending (advanced) ----
 		/**
-		 * @brief Sends a point-to-point connectionless telegram carrying a raw APCI to one
-		 *        device — e.g. apci 0x300 (A_DeviceDescriptor_Read) to ping it.
-		 * @param target        Physical address of the addressed device.
-		 * @param apci          Raw 10-bit APCI.
-		 * @param payload       Optional APDU payload after the APCI (may be nullptr).
+		 * @brief Advanced: sends a message to a single device addressed by its physical address,
+		 *        for example to ping it.
+		 * @param target        Physical address of the device to send to.
+		 * @param apci          Application service code to send.
+		 * @param payload       Optional data after the service code (may be nullptr).
 		 * @param payloadLength Number of payload bytes.
-		 * @return true if the driver returned a positive L_Data.con.
+		 * @return true if the bus confirmed the send.
 		*/
 		bool sendIndividual(PhysicalAddress target, uint16_t apci,
 		                    const uint8_t* payload = nullptr, uint8_t payloadLength = 0);
 
 		/**
-		 * @brief Sends a TPCI-only transport control telegram (T_Connect, T_Disconnect,
-		 *        T_ACK, T_NAK) to one device.
-		 * @param target         Physical address of the addressed device.
-		 * @param tpci           Control PDU to emit.
-		 * @param sequenceNumber Sequence number for Ack/Nak; ignored otherwise.
-		 * @return true if the driver returned a positive L_Data.con.
+		 * @brief Advanced: sends a transport control message (connect, disconnect, acknowledge)
+		 *        to a single device addressed by its physical address.
+		 * @param target         Physical address of the device to send to.
+		 * @param tpci           The control message to send.
+		 * @param sequenceNumber Sequence number, used only for acknowledge messages.
+		 * @return true if the bus confirmed the send.
 		*/
 		bool sendControl(PhysicalAddress target, KnxTpci tpci, uint8_t sequenceNumber = 0);
 
 		/**
-		 * @brief Services the KNX stack: call this every Arduino loop() iteration. It drains every
-		 *        complete frame the driver has received, parses each, and dispatches it to the
-		 *        registered objects (which decode, cache, and fire their callbacks). Non-blocking.
-		 * @return true if at least one telegram was processed this call.
+		 * @brief Services the bus: call this on every iteration of loop(). It receives waiting
+		 *        telegrams and fires the callbacks of the objects they are addressed to. It never
+		 *        blocks, so do not replace it with delay()-based timing.
+		 * @return true if at least one telegram was handled this call.
 		*/
 		bool loop(void);
 
 		/**
-		 * @brief This device's physical address (frame source).
-		 * @return The stored physical address.
+		 * @brief This device's physical address.
+		 * @return The physical address the node was created with.
 		*/
 		PhysicalAddress address(void) const { return physicalAddress; }
 
 		//---- Diagnostics ----
 		/**
-		 * @brief Turns verbose debug logging on or off: every telegram sent and received
-		 *        (including telegrams addressed to other devices), frame build/parse, value
-		 *        coding and driver traffic are printed over Serial, prefixed with [knx].
-		 *        Intended for diagnosing a misbehaving installation — it is chatty, and the
-		 *        printing itself costs time on the receive path.
-		 * @param on true to enable logging, false to silence it.
-		 * @note  This is a LIBRARY-WIDE switch, not a per-node one: the flag behind it is
-		 *        shared, so enabling it on any node enables it everywhere.
+		 * @brief Turns verbose tracing on or off. When on, every telegram sent and received
+		 *        (including traffic for other devices), and the library's internal steps, are
+		 *        printed over Serial with a [knx] prefix. Useful for diagnosing a problem; leave
+		 *        it off in normal operation, as the printing is chatty and slows the receive path.
+		 * @param on true to enable tracing, false to turn it off.
+		 * @note  This affects the whole library, not just this node: turning it on for one node
+		 *        turns it on everywhere.
 		*/
 		void enableDebugMode(bool on) { KnxDebug::setEnabled(on); }
 
@@ -159,14 +157,19 @@ class KnxCoordinator {
 #ifdef ARDUINO
 	public:
 		/**
-		 * @brief Arduino convenience: construct from a driver and a "area.line.device" string.
+		 * @brief Advanced: creates a bus node from a driver you provide and an address string.
+		 * @param driver          The bus driver to use; not owned, and must outlive this node.
+		 * @param physicalAddress This device's physical address as "area.line.device", e.g. "1.1.5".
 		*/
 		KnxCoordinator(IKnxDriver* driver, String physicalAddress)
 			: p_driver(driver), physicalAddress(physicalAddressFromString(physicalAddress)) {}
 
 		/**
-		 * @brief Stateless send tier (PLAN §3): encode a value and transmit it to a group address
-		 *        given as a "main/middle/sub" string. No receive — use a KnxObject for that.
+		 * @brief Sends a value to a group address given as a string, without needing a device
+		 *        object. This only sends; to receive, use a device object.
+		 * @param ga    Destination group address as "main/middle/sub", e.g. "0/4/2".
+		 * @param value The value to send.
+		 * @return true if the bus confirmed the send.
 		*/
 		bool send(String ga, const KnxValue& value) { return send(packedGroupAddressFromString(ga), value); }
 #endif // ARDUINO

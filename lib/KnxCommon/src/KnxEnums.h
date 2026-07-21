@@ -11,26 +11,29 @@
 //---- Libraries ----
 #include <cstdint>
 
-//---- Datapoint types ----
+/**
+ * @brief The datapoint type of a KNX value — what kind of data it holds and how big it is.
+ *        You pass one to a generic KnxObject; the named device classes pick it for you.
+*/
 enum class KnxDpt : uint8_t {
-	DPT1	= 1,	// 1 bit, binary values
-	DPT2	= 2,	// 2 bit, 0..4, states
-	DPT3	= 3,	// 4 bit, 0..15, dimming or blind steps
-	DPT4	= 4,	// 8 bit, 0..255, ASCII characters
-	DPT5	= 5,	// 8 bit, 0..255, unsigned integer
-	DPT6	= 6,	// 8 bit, -128..127, signed integer
-	DPT7	= 7,	// 16 bit, 0..65535, unsigned integer
-	DPT8	= 8,	// 16 bit, -32768..32767, signed integer
-	DPT9	= 9,	// 16 bit float
-	DPT10	= 10,	// 3-byte time: hours, minutes, seconds
-	DPT11	= 11,	// 3-byte date: day, month, year
-	DPT12	= 12,	// 32 bit, 0..4294967295, unsigned integer
-	DPT13	= 13,	// 32 bit, -2147483648..2147483647, signed integer
-	DPT14	= 14,	// 32 bit float
-	DPT16	= 16,	// 14-byte ASCII string
-	DPT19	= 19,	// 8-byte datetime
-	DPT232	= 232,	// 3-byte RGB colour (DPT232.600)
-	UNKNOWN
+	DPT1	= 1,	///< 1 bit — on/off, true/false
+	DPT2	= 2,	///< 2 bit — a value 0..3
+	DPT3	= 3,	///< 4 bit — a relative dimming or blind step
+	DPT4	= 4,	///< 8 bit — a single character
+	DPT5	= 5,	///< 8 bit — unsigned 0..255 (also used for 0..100 %)
+	DPT6	= 6,	///< 8 bit — signed -128..127
+	DPT7	= 7,	///< 16 bit — unsigned 0..65535
+	DPT8	= 8,	///< 16 bit — signed -32768..32767
+	DPT9	= 9,	///< 16 bit floating point (e.g. temperature)
+	DPT10	= 10,	///< time of day
+	DPT11	= 11,	///< calendar date
+	DPT12	= 12,	///< 32 bit — unsigned
+	DPT13	= 13,	///< 32 bit — signed
+	DPT14	= 14,	///< 32 bit floating point
+	DPT16	= 16,	///< a short text string
+	DPT19	= 19,	///< combined date and time
+	DPT232	= 232,	///< RGB colour
+	UNKNOWN 		///< no/unknown datapoint type
 };
 
 //---- Link-layer acknowledge codes ----
@@ -68,19 +71,20 @@ enum class KnxAddressType : uint8_t {
 	Individual
 };
 
-//---- Transport control field (octet 6) ----
-// Transport Layer spec (03_03_04) Figure 3. Bit 7 = data/control flag, bit 6 = numbered,
-// bits 5..2 = sequence number, bits 1..0 = service (or the top two APCI bits on data PDUs).
-// Only the connectionless data PDUs carry an APCI; the control PDUs are TPCI-only frames.
+/**
+ * @brief Advanced: the transport-layer kind of a point-to-point message. You pass Connect,
+ *        Disconnect, Ack or Nak to KnxCoordinator::sendControl(); the Data* kinds identify what
+ *        a received message is.
+*/
 enum class KnxTpci : uint8_t {
-	DataGroup,        // AT = 1, unnumbered data — ordinary group communication
-	DataIndividual,   // AT = 0, unnumbered data — point-to-point connectionless
-	DataConnected,    // AT = 0, numbered data — inside a transport connection
-	Connect,          // 0x80 — open a transport connection
-	Disconnect,       // 0x81 — close a transport connection
-	Ack,              // 11 SeqNo 10
-	Nak,              // 11 SeqNo 11
-	Unknown
+	DataGroup,        ///< ordinary group-address message
+	DataIndividual,   ///< a message to one device, outside a connection
+	DataConnected,    ///< a message to one device, inside a connection
+	Connect,          ///< open a connection to a device
+	Disconnect,       ///< close a connection to a device
+	Ack,              ///< acknowledge a received message
+	Nak,              ///< reject a received message
+	Unknown           ///< unrecognised
 };
 
 //---- Intent behaviours (device layer) ----
@@ -95,18 +99,17 @@ enum class DimmingBehaviour : uint8_t {
 	Brighter = 0x01
 };
 
-// DPT3.007 step code (bits 2..0 of the 4-bit control-dimming value).
-// stepcode encodes the number of dimming intervals: 2^(stepcode-1). The interval
-// size in percent is therefore 100 % / 2^(stepcode-1) — larger stepcode = finer step.
-// stepcode 0 is the "break"/stop command. This ordering fixes the earlier enum where
-// Stop and the finest step both mapped to 0x00 and the percentages ran backwards.
+/**
+ * @brief How large a dimming step KnxDimmLight::brighter() / darker() takes. A larger percentage
+ *        is a coarser step; the default (Percent_100) moves the light in one full step.
+*/
 enum class DimmIncrement : uint8_t {
-	Stop         = 0x00,	// break — stop dimming
-	Percent_100  = 0x01,	// 1 interval    -> 100 %
-	Percent_50   = 0x02,	// 2 intervals   -> 50 %
-	Percent_25   = 0x03,	// 4 intervals   -> 25 %
-	Percent_12_5 = 0x04,	// 8 intervals   -> 12.5 %
-	Percent_6    = 0x05,	// 16 intervals  -> 6.25 %
-	Percent_3    = 0x06,	// 32 intervals  -> 3.125 %
-	Percent_1_5  = 0x07		// 64 intervals  -> 1.5625 %
+	Stop         = 0x00,	///< stop a running dimming ramp
+	Percent_100  = 0x01,	///< a full step (100 %)
+	Percent_50   = 0x02,	///< a 50 % step
+	Percent_25   = 0x03,	///< a 25 % step
+	Percent_12_5 = 0x04,	///< a 12.5 % step
+	Percent_6    = 0x05,	///< a 6.25 % step
+	Percent_3    = 0x06,	///< a 3.125 % step
+	Percent_1_5  = 0x07		///< the finest step (1.5625 %)
 };
