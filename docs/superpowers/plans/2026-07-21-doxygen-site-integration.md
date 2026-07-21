@@ -443,7 +443,8 @@ HTML_EXTRA_STYLESHEET  = doxygen-theme/doxygen-awesome.css \
                          doxygen-theme/bootstrap-icons.min.css \
                          doxygen-theme/site-style.css \
                          doxygen-theme/site-chrome-override.css
-HTML_EXTRA_FILES       = doxygen-theme/fonts
+HTML_EXTRA_FILES       = doxygen-theme/fonts \
+                         doxygen-theme/bootstrap.bundle.min.js
 ```
 
 - [ ] **Step 2: Regenerate and check for new warnings**
