@@ -72,8 +72,10 @@ h2.groupheader {
  * assuming #top starts at the very top of the viewport. Our injected navbar (and, on the
  * landing page only, the hero) sits above #top, so #side-nav needs to start lower by exactly
  * that much. --chrome-offset is measured live by a script in header.html (it varies per page:
- * navbar alone vs navbar+hero), with a 0px fallback so the layout degrades to
- * doxygen-awesome's original assumption if JS is unavailable.
+ * navbar alone vs navbar+hero). The 0px fallback is not graceful degradation: without JS,
+ * --chrome-offset stays 0 and #side-nav reverts to the original overlap bug this rule exists
+ * to fix (it renders ~navbar-height too high). Accepted because Bootstrap's own navbar
+ * collapse toggle already requires JS, so a JS-off visitor has a degraded navbar regardless.
  * #doc-content is unaffected: being normal-flow (not absolute), it already follows the
  * injected chrome automatically. */
 @media screen and (min-width: 768px) {
