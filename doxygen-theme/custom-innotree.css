@@ -67,12 +67,13 @@ h2.groupheader {
     border-bottom: 3px solid var(--primary-light-color);
 }
 
-/* Doxygen's own navtree.css positions #side-nav with `position: absolute; top: 0` relative
- * to the page origin, assuming #top starts at the very top of the viewport. Our injected
- * navbar (and, on the landing page only, the hero) sits above #top, so #side-nav needs to
- * start lower by exactly that much. --chrome-offset is measured live by a script in
- * header.html (it varies per page: navbar alone vs navbar+hero), with a 0px fallback so the
- * layout degrades to doxygen-awesome's original assumption if JS is unavailable.
+/* doxygen's own navtree.css positions #side-nav with `position: absolute; left: 0px` (no
+ * top set there); doxygen-awesome-sidebar-only.css supplies `top: var(--top-height)`,
+ * assuming #top starts at the very top of the viewport. Our injected navbar (and, on the
+ * landing page only, the hero) sits above #top, so #side-nav needs to start lower by exactly
+ * that much. --chrome-offset is measured live by a script in header.html (it varies per page:
+ * navbar alone vs navbar+hero), with a 0px fallback so the layout degrades to
+ * doxygen-awesome's original assumption if JS is unavailable.
  * #doc-content is unaffected: being normal-flow (not absolute), it already follows the
  * injected chrome automatically. */
 @media screen and (min-width: 768px) {
