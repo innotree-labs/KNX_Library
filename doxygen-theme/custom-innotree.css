@@ -15,6 +15,9 @@ html {
     --page-foreground-color: #044A3C;
     --separator-color:       rgba(6, 109, 89, 0.18);
 
+    /* Sidebar / search bar / per-page TOC — matches the site's landing-hero light green */
+    --side-nav-background:   #EEF9E7;
+
     /* Typography — same stack as the site */
     --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 
