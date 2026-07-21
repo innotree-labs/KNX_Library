@@ -56,6 +56,19 @@ $extrastylesheet
     </div>
 </nav>
 <!-- END INNOTREE NAVBAR -->
+<script>
+(function() {
+    function measureChromeOffset() {
+        var navbarEl = document.querySelector('nav.custom-navbar');
+        var heroEl = document.querySelector('header.small-hero');
+        var offset = (navbarEl ? navbarEl.getBoundingClientRect().height : 0) +
+                     (heroEl ? heroEl.getBoundingClientRect().height : 0);
+        document.documentElement.style.setProperty('--chrome-offset', offset + 'px');
+    }
+    measureChromeOffset();
+    window.addEventListener('resize', measureChromeOffset);
+})();
+</script>
 <!--BEGIN FULL_SIDEBAR-->
 <div id="side-nav" class="ui-resizable side-nav-resizable"><!-- do not remove this div, it is closed by doxygen! -->
 <!--END FULL_SIDEBAR-->
