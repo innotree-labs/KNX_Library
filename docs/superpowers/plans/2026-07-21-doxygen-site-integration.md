@@ -65,7 +65,7 @@ re-sync. No build step pulls them live from `Website_`.
 
 ```bash
 SITE=/Applications/XAMPP/xamppfiles/htdocs/Website_
-DEST=/Users/florian/Coding/Softwarestack_STKNX/doxygen-theme
+DEST=/Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration/doxygen-theme
 mkdir -p "$DEST/fonts"
 cp "$SITE/resources/vendor/bootstrap/css/bootstrap.min.css" "$DEST/bootstrap.min.css"
 cp "$SITE/resources/vendor/bootstrap/js/bootstrap.bundle.min.js" "$DEST/bootstrap.bundle.min.js"
@@ -77,14 +77,14 @@ cp "$SITE/style/style.css" "$DEST/site-style.css"
 
 - [ ] **Step 2: Verify all six files landed**
 
-Run: `ls -la /Users/florian/Coding/Softwarestack_STKNX/doxygen-theme/ /Users/florian/Coding/Softwarestack_STKNX/doxygen-theme/fonts/`
+Run: `ls -la /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration/doxygen-theme/ /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration/doxygen-theme/fonts/`
 Expected: `bootstrap.min.css`, `bootstrap.bundle.min.js`, `bootstrap-icons.min.css`, `site-style.css`
 in the theme dir; `bootstrap-icons.woff` and `bootstrap-icons.woff2` in `fonts/`.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 git add doxygen-theme/bootstrap.min.css doxygen-theme/bootstrap.bundle.min.js \
         doxygen-theme/bootstrap-icons.min.css doxygen-theme/fonts doxygen-theme/site-style.css
 git commit -m "Vendor Bootstrap 5.3.8 + Bootstrap Icons 1.11.3 + site CSS for docs chrome"
@@ -113,7 +113,7 @@ git commit -m "Vendor Bootstrap 5.3.8 + Bootstrap Icons 1.11.3 + site CSS for do
 
 ```bash
 export PATH="/opt/homebrew/bin:$PATH"
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 doxygen -w html doxygen-theme/header.html doxygen-theme/footer.html doxygen-theme/stylesheet.css.tmp
 rm doxygen-theme/stylesheet.css.tmp
 ```
@@ -185,13 +185,13 @@ already on a docs page.
 
 - [ ] **Step 4: Verify the file is well-formed HTML fragment-wise**
 
-Run: `grep -c "INNOTREE NAVBAR" /Users/florian/Coding/Softwarestack_STKNX/doxygen-theme/header.html`
+Run: `grep -c "INNOTREE NAVBAR" /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration/doxygen-theme/header.html`
 Expected: `2` (the opening and closing comment markers).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 git add doxygen-theme/header.html
 git commit -m "Add customized Doxygen header template with Innotree navbar"
 ```
@@ -283,13 +283,13 @@ Replace with:
 
 - [ ] **Step 2: Verify the footer marker is present**
 
-Run: `grep -c "custom-footer" /Users/florian/Coding/Softwarestack_STKNX/doxygen-theme/footer.html`
+Run: `grep -c "custom-footer" /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration/doxygen-theme/footer.html`
 Expected: `1` or more.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 git add doxygen-theme/footer.html
 git commit -m "Add customized Doxygen footer template with Innotree footer"
 ```
@@ -342,7 +342,7 @@ invisible (white-intended text landing on the same green as its background).
 
 Run: `python3 -c "import tinycss2" 2>/dev/null && python3 -c "
 import tinycss2
-with open('/Users/florian/Coding/Softwarestack_STKNX/doxygen-theme/site-chrome-override.css') as f:
+with open('/Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration/doxygen-theme/site-chrome-override.css') as f:
     rules = tinycss2.parse_stylesheet(f.read(), skip_whitespace=True, skip_comments=True)
 errors = [r for r in rules if r.type == 'error']
 print('errors:', errors)
@@ -354,7 +354,7 @@ Task 7's Playwright check is the real validation).
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 git add doxygen-theme/site-chrome-override.css
 git commit -m "Add scoped override fixing navbar/footer link-color collision"
 ```
@@ -398,13 +398,13 @@ Replace with:
 
 - [ ] **Step 2: Verify the variable is present**
 
-Run: `grep -c "side-nav-background" /Users/florian/Coding/Softwarestack_STKNX/doxygen-theme/custom-innotree.css`
+Run: `grep -c "side-nav-background" /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration/doxygen-theme/custom-innotree.css`
 Expected: `1`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 git add doxygen-theme/custom-innotree.css
 git commit -m "Set light-green sidebar background matching site landing hero"
 ```
@@ -450,7 +450,7 @@ HTML_EXTRA_FILES       = doxygen-theme/fonts
 
 ```bash
 export PATH="/opt/homebrew/bin:$PATH"
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 doxygen Doxyfile
 cat doxygen/warnings.txt
 ```
@@ -470,7 +470,7 @@ Expected: `bootstrap-icons.woff` and `bootstrap-icons.woff2` listed.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 git add Doxyfile
 git commit -m "Wire custom header/footer templates and site assets into Doxyfile"
 ```
@@ -488,7 +488,7 @@ git commit -m "Wire custom header/footer templates and site assets into Doxyfile
 - [ ] **Step 1: Serve the regenerated output**
 
 ```bash
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 nohup python3 -m http.server 8080 --directory doxygen/html > /tmp/doxyserver.log 2>&1 & disown
 sleep 1
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/index.html
@@ -553,7 +553,7 @@ proceed to Task 8 with unverified chrome.
 - [ ] **Step 1: Insert the hero block after the navbar, only in `index.html`**
 
 ```bash
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 python3 - <<'PYEOF'
 path = "doxygen/html/index.html"
 with open(path) as f:
@@ -620,7 +620,7 @@ PLAN.md so it survives the next regeneration.
 SITE=/Applications/XAMPP/xamppfiles/htdocs/Website_
 rm -rf "$SITE/documentation"
 mkdir -p "$SITE/documentation"
-cp -r /Users/florian/Coding/Softwarestack_STKNX/doxygen/html/. "$SITE/documentation/"
+cp -r /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration/doxygen/html/. "$SITE/documentation/"
 ls "$SITE/documentation" | grep -c html
 ```
 
@@ -713,13 +713,13 @@ that happens.
 
 - [ ] **Step 2: Verify the new content is present**
 
-Run: `grep -c "Publishing a docs update" /Users/florian/Coding/Softwarestack_STKNX/PLAN.md`
+Run: `grep -c "Publishing a docs update" /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration/PLAN.md`
 Expected: `1`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/florian/Coding/Softwarestack_STKNX
+cd /Users/florian/Coding/Softwarestack_STKNX/.worktrees/doxygen-site-integration
 git add PLAN.md
 git commit -m "Document the Doxygen site-integration workflow and publish procedure"
 ```
