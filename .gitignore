@@ -13,3 +13,8 @@
 
 # macOS
 .DS_Store
+# Generated Doxygen output
+doxygen/
+
+# Playwright MCP session artifacts
+.playwright-mcp/

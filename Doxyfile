@@ -1,0 +1,91 @@
+# Doxyfile for the Konnextor KNX library — user-facing API reference.
+# Scoped to the public headers only; the lower layers (framing, driver, codec) are omitted
+# on purpose. Regenerate with:  doxygen Doxyfile
+
+#---- Project ----
+PROJECT_NAME           = "Konnextor"
+PROJECT_BRIEF          = "An Arduino KNX library — simple, no ETS required"
+OUTPUT_DIRECTORY       = doxygen
+CREATE_SUBDIRS         = NO
+
+#---- Input: the README as the landing page, then the public headers ----
+INPUT                  = README.md \
+                         examples.md \
+                         lib/Konnextor/src/Konnextor.h \
+                         lib/KnxObject/src/KnxObject.h \
+                         lib/KnxObject/src/KnxLighting.h \
+                         lib/KnxObject/src/KnxCovers.h \
+                         lib/KnxObject/src/KnxClimate.h \
+                         lib/KnxObject/src/KnxDateTime.h \
+                         lib/KnxObject/src/KnxScalars.h \
+                         lib/KnxValue/src/KnxValue.h \
+                         lib/KnxCoordinator/src/KnxCoordinator.h \
+                         lib/KnxCommon/src/KnxEnums.h
+FILE_PATTERNS          = *.h *.md
+RECURSIVE              = NO
+USE_MDFILE_AS_MAINPAGE = README.md
+
+#---- What to document: the public surface only ----
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+EXTRACT_LOCAL_CLASSES  = NO
+# Hide undocumented members (the protected/internal machinery) so the pages show only the
+# documented public API. Every public member is documented, so nothing user-facing is lost.
+HIDE_UNDOC_MEMBERS     = YES
+HIDE_UNDOC_CLASSES     = YES
+INLINE_INHERITED_MEMB  = YES
+SORT_MEMBER_DOCS       = NO
+SORT_BRIEF_DOCS        = NO
+
+# Hide the internal enums that share KnxEnums.h with the user-facing ones.
+EXCLUDE_SYMBOLS        = KnxPriority GroupValueType KnxAddressType \
+                         AcknowledgeInfo SwitchingBehaviour DimmingBehaviour
+
+#---- Preprocessing: define ARDUINO so the String constructors are documented ----
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = ARDUINO
+SKIP_FUNCTION_MACROS   = YES
+
+#---- Comment parsing ----
+JAVADOC_AUTOBRIEF      = YES
+OPTIMIZE_OUTPUT_FOR_C  = NO
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+
+#---- Usage-focused: no source browser, no architecture graphs ----
+SOURCE_BROWSER         = NO
+VERBATIM_HEADERS       = NO
+SHOW_INCLUDE_FILES     = NO
+HAVE_DOT               = NO
+CLASS_GRAPH            = NO
+COLLABORATION_GRAPH    = NO
+INCLUDE_GRAPH          = NO
+INCLUDED_BY_GRAPH      = NO
+DIRECTORY_GRAPH        = NO
+
+#---- HTML output ----
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+GENERATE_LATEX         = NO
+HTML_COLORSTYLE        = LIGHT
+
+# Theme: doxygen-awesome-css (sidebar-only variant) + the Innotree green override last.
+HTML_EXTRA_STYLESHEET  = doxygen-theme/doxygen-awesome.css \
+                         doxygen-theme/doxygen-awesome-sidebar-only.css \
+                         doxygen-theme/custom-innotree.css
+
+#---- Warnings: use these to verify every public member is documented ----
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+# Off: the trivial accessors and framework hooks carry a self-describing @brief; a separate
+# @return/@param line on each would be noise, not information.
+WARN_NO_PARAMDOC       = NO
+WARN_LOGFILE           = doxygen/warnings.txt

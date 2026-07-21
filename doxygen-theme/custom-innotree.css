@@ -1,0 +1,65 @@
+/*
+ * Innotree brand override for doxygen-awesome-css.
+ * Loaded AFTER doxygen-awesome(.css / -sidebar-only.css) so these win.
+ * Palette mirrors the website's style/style.css so the docs read as one system.
+ */
+
+html {
+    /* --- Brand greens (from style.css) --- */
+    --primary-color:        #066d59;   /* forest green — links, headers, accents */
+    --primary-dark-color:   #044A3C;   /* dark text green — hover, active */
+    --primary-light-color:  #0AC49F;   /* bright accent — highlights, hover fills */
+
+    /* Soft page background, matching the site's #FAFAFA */
+    --page-background-color: #FAFAFA;
+    --page-foreground-color: #044A3C;
+    --separator-color:       rgba(6, 109, 89, 0.18);
+
+    /* Typography — same stack as the site */
+    --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+    /* Rounded, soft-shadow surfaces like the site's cards */
+    --border-radius-large:  12px;
+    --border-radius-small:  8px;
+    --box-shadow: 0 2px 10px rgba(6, 109, 89, 0.10);
+}
+
+/* --- Dark IDE code blocks (mirror the site's hero code windows) --- */
+/* Block code (```cpp fences → div.fragment). Inline `code` stays light for readable prose. */
+html {
+    --fragment-background:        #171d1b;
+    --fragment-foreground:        #d8dee9;
+    --fragment-keyword:           #0AC49F;   /* keyword */
+    --fragment-keywordtype:       #38BDF8;   /* type */
+    --fragment-keywordflow:       #0AC49F;   /* control flow */
+    --fragment-token:             #A3E635;   /* string literal */
+    --fragment-comment:           #64748B;   /* comment */
+    --fragment-link:              #38BDF8;
+    --fragment-preprocessor:      #FB923C;   /* #include etc. */
+    --fragment-linenumber-color:      #64748B;
+    --fragment-linenumber-background: #121715;
+    --fragment-linenumber-border:     #23302b;
+}
+
+/* Give fenced code blocks the rounded, elevated look of the site's IDE windows. */
+div.fragment,
+pre.fragment {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+}
+
+/* The top header/title bar in the brand green. */
+#titlearea {
+    background-color: var(--primary-color);
+    border-bottom: none;
+}
+#projectname,
+#projectbrief {
+    color: #ffffff;
+}
+
+/* Accent underline under section headings, echoing the site's .title-underline. */
+h2.groupheader {
+    border-bottom: 3px solid var(--primary-light-color);
+}

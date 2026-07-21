@@ -17,43 +17,43 @@
 
 /** @brief A relative dimming step: a direction and how large a step to take. */
 struct DptDim {
-	bool    increase;   // true = brighter/up, false = darker/down
-	uint8_t stepcode;   // 0 = stop, 1..7 = step size (see DimmIncrement)
+	bool    increase;   ///< true = brighter/up, false = darker/down
+	uint8_t stepcode;   ///< 0 = stop, 1..7 = step size (see DimmIncrement)
 };
 
 /** @brief A time of day. */
 struct DptTime {
-	uint8_t weekday;    // 0 = no day, 1 = Monday .. 7 = Sunday
-	uint8_t hour;       // 0..23
-	uint8_t minute;     // 0..59
-	uint8_t second;     // 0..59
+	uint8_t weekday;    ///< 0 = no day, 1 = Monday .. 7 = Sunday
+	uint8_t hour;       ///< 0..23
+	uint8_t minute;     ///< 0..59
+	uint8_t second;     ///< 0..59
 };
 
 /** @brief A calendar date. */
 struct DptDate {
-	uint8_t  day;       // 1..31
-	uint8_t  month;     // 1..12
-	uint16_t year;      // full year, e.g. 2026
+	uint8_t  day;       ///< 1..31
+	uint8_t  month;     ///< 1..12
+	uint16_t year;      ///< full year, e.g. 2026
 };
 
 /** @brief A combined date and time, with daylight-saving and fault flags. */
 struct DptDateTime {
-	uint16_t year;      // full year, e.g. 2026
-	uint8_t  month;     // 1..12
-	uint8_t  day;       // 1..31
-	uint8_t  weekday;   // 0 = no day, 1 = Monday .. 7 = Sunday
-	uint8_t  hour;      // 0..24
-	uint8_t  minute;    // 0..59
-	uint8_t  second;    // 0..59
-	bool     summerTime;  // daylight saving active
-	bool     faultFlag;   // clock/data fault
+	uint16_t year;        ///< full year, e.g. 2026
+	uint8_t  month;       ///< 1..12
+	uint8_t  day;         ///< 1..31
+	uint8_t  weekday;     ///< 0 = no day, 1 = Monday .. 7 = Sunday
+	uint8_t  hour;        ///< 0..24
+	uint8_t  minute;      ///< 0..59
+	uint8_t  second;      ///< 0..59
+	bool     summerTime;  ///< daylight saving active
+	bool     faultFlag;   ///< clock/data fault
 };
 
 /** @brief An RGB colour, each channel 0..255. */
 struct DptColor {
-	uint8_t r;
-	uint8_t g;
-	uint8_t b;
+	uint8_t r;          ///< red channel, 0..255
+	uint8_t g;          ///< green channel, 0..255
+	uint8_t b;          ///< blue channel, 0..255
 };
 
 /**
