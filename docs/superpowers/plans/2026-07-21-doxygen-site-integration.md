@@ -587,7 +587,10 @@ exactly once — if it fails, STOP and check Task 2's output before re-running).
 
 - [ ] **Step 2: Verify the hero appears only on `index.html`**
 
-Run: `grep -l "small-hero" doxygen/html/*.html | wc -l`
+Run: `grep -l '<header class="py-5 small-hero">' doxygen/html/*.html | wc -l`
+(Use this exact pattern, not a bare `small-hero` substring match — `header.html`'s chrome-offset
+measurement script references the CSS selector `header.small-hero` on every page, so a bare
+substring match would false-positive on all of them.)
 Expected: `1` (only `index.html`).
 
 - [ ] **Step 3: Visual check**
