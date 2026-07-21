@@ -6,7 +6,8 @@
  */
 .navbar.custom-navbar .navbar-brand,
 .navbar.custom-navbar .nav-link,
-.custom-footer .nav-link {
+.custom-footer .nav-link,
+.custom-footer .text-white {
     color: #fff !important;
 }
 
