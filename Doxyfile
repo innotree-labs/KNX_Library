@@ -11,6 +11,7 @@ CREATE_SUBDIRS         = NO
 #---- Input: the README as the landing page, then the public headers ----
 INPUT                  = README.md \
                          examples.md \
+                         Hardware.md \
                          lib/Konnextor/src/Konnextor.h \
                          lib/KnxObject/src/KnxObject.h \
                          lib/KnxObject/src/KnxLighting.h \
