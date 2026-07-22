@@ -1,6 +1,6 @@
 {
   "name": "KnxValue",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The KnxValue tagged-union value currency and the symmetric per-DPT wire codec (single source of truth). Arduino-free and host-testable.",
   "frameworks": "*",
   "platforms": "*",
