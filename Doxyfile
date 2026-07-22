@@ -75,19 +75,7 @@ FULL_SIDEBAR           = NO
 GENERATE_LATEX         = NO
 HTML_COLORSTYLE        = LIGHT
 
-# Theme: doxygen-awesome-css (sidebar-only variant) + the Innotree green override last.
-HTML_HEADER            = doxygen-theme/header.html
-HTML_FOOTER            = doxygen-theme/footer.html
-HTML_EXTRA_STYLESHEET  = doxygen-theme/doxygen-awesome.css \
-                         doxygen-theme/doxygen-awesome-sidebar-only.css \
-                         doxygen-theme/custom-innotree.css \
-                         doxygen-theme/bootstrap.min.css \
-                         doxygen-theme/bootstrap-icons.min.css \
-                         doxygen-theme/site-style.css \
-                         doxygen-theme/site-chrome-override.css
-HTML_EXTRA_FILES       = doxygen-theme/fonts/bootstrap-icons.woff \
-                         doxygen-theme/fonts/bootstrap-icons.woff2 \
-                         doxygen-theme/bootstrap.bundle.min.js
+# No custom theme: plain Doxygen output. Website_ styles the raw tags itself (Step 4b).
 
 #---- Warnings: use these to verify every public member is documented ----
 QUIET                  = YES
