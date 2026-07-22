@@ -1,0 +1,99 @@
+name: Publish docs
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag, VERSION, and every library.json agree
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          FILE_VERSION="$(cat VERSION)"
+
+          if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::tag v$TAG_VERSION does not match VERSION file ($FILE_VERSION)"
+            exit 1
+          fi
+
+          for f in lib/*/library.json; do
+            LIB_VERSION="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['version'])" "$f")"
+            if [ "$LIB_VERSION" != "$FILE_VERSION" ]; then
+              echo "::error::$f version ($LIB_VERSION) does not match VERSION file ($FILE_VERSION)"
+              exit 1
+            fi
+          done
+
+          echo "All versions agree: $FILE_VERSION"
+
+  test:
+    needs: verify-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-pio
+      - run: pio test -e native
+
+  build:
+    needs: verify-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-pio
+      - run: pio run -e seeed_xiao_esp32c6
+
+  docs:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned Doxygen 1.17.0
+        run: |
+          set -euo pipefail
+          curl -fsSL -o doxygen.tar.gz \
+            https://github.com/doxygen/doxygen/releases/download/Release_1_17_0/doxygen-1.17.0.linux.bin.tar.gz
+          tar xzf doxygen.tar.gz
+          DOXYGEN_BIN="$(find "$PWD" -maxdepth 3 -type f -name doxygen -perm -u+x | head -n1)"
+          if [ -z "$DOXYGEN_BIN" ]; then
+            echo "::error::doxygen binary not found after extracting archive"
+            exit 1
+          fi
+          dirname "$DOXYGEN_BIN" >> "$GITHUB_PATH"
+
+      - name: Generate docs
+        run: doxygen Doxyfile
+
+      - name: Fail if Doxygen emitted warnings
+        run: |
+          if [ -s doxygen/warnings.txt ]; then
+            echo "::error::doxygen/warnings.txt is non-empty:"
+            cat doxygen/warnings.txt
+            exit 1
+          fi
+          echo "warnings.txt is empty, as required"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: doxygen/html
+
+      - uses: actions/deploy-pages@v4
+        id: deployment
