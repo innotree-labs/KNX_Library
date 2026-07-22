@@ -1,0 +1,20 @@
+name: Set up PlatformIO
+description: >
+  Installs PlatformIO with a cached ~/.platformio. Assumes actions/checkout
+  has already run in the calling job.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - uses: actions/cache@v4
+      with:
+        path: ~/.platformio
+        key: ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+        restore-keys: |
+          ${{ runner.os }}-platformio-
+
+    - run: pip install -U platformio
+      shell: bash
