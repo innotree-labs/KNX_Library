@@ -13,8 +13,11 @@ history). This phase is **documentation only** — no behaviour changes.
   is planned to be superseded, not just extended.** Step 3's own commits and the pages it
   produced are not being reverted — they're what's live today — but new work should follow
   Step 4's direction, not Step 3's.
-- **Step 4 — pipeline: build on version bump, publish to GitHub Pages, `Website_` fetches
-  content at request time.** PLANNED, NOT STARTED. See below.
+- **Step 4a — CI/CD pipeline: tests on every push, Doxygen → GitHub Pages on a version tag.**
+  DONE. Live at **https://innotree-labs.github.io/KNX_Library/**. See below.
+- **Step 4b — `Website_` fetches published docs at request time; Doxygen becomes a pure content
+  generator (theme/chrome stripped).** PLANNED, NOT STARTED — deliberately deferred out of 4a.
+  See below.
 
 ### Decisions already settled (do not re-litigate)
 
@@ -186,19 +189,85 @@ version ever changes, these copies go stale silently — there is no shared temp
 static Doxygen output and the live PHP site. Re-sync manually (repeat the integration plan's
 Tasks 1–5 file edits against the current site source) when that happens.
 
-## Step 4 — PLANNED, NOT STARTED: CD pipeline, publish to GitHub Pages, `Website_` fetches at runtime
+## Step 4a — DONE: CI/CD pipeline (tests + Doxygen → GitHub Pages)
 
-**Why this replaces Step 3's mechanism, not just extends it:** Step 3's approach (bake a static
-copy of the site's navbar/footer into Doxygen's own templates, manually regenerate and
-`cp -r` the whole output into `Website_/documentation/`) has two problems the user wants gone,
-not just documented as accepted risk:
+Design doc: `docs/superpowers/specs/2026-07-22-ci-cd-pipeline-design.md`. Implementation plan:
+`docs/superpowers/plans/2026-07-22-ci-cd-pipeline.md`. **Scoped deliberately to the pipeline
+only** — publishes today's Step 3 output (doxygen-awesome theme + baked Website_ chrome) as-is;
+the "pure content generator" rework and `Website_`'s runtime fetch are Step 4b, still not
+started.
 
-1. **The navbar/footer are duplicated.** They already exist once, live, in
-   `Website_/components/navbar.php`/`footer.php`. Baking a second, static copy into
-   `doxygen-theme/header.html`/`footer.html` is exactly the "drift risk" Step 3's own notes
-   flagged repeatedly — the user's read: that's not an acceptable permanent state, it's a smell.
-2. **Publishing is a manual copy-paste**, not a pipeline. The user wants: bump the library's
-   version number → docs update on the site, with no manual regeneration/copy step.
+**Live site: https://innotree-labs.github.io/KNX_Library/**
+
+### What exists and works
+
+- **`VERSION`** (repo root) — single source of truth for the library's version, replacing 7
+  independently-hand-edited `lib/*/library.json` version fields.
+- **`scripts/bump_version.py <X.Y.Z>`** — writes `VERSION`, syncs the same value into all 7
+  `library.json` files, prints the follow-up `git` commands but never runs them itself (commit/
+  tag/push stay an explicit human step — pushing the tag is the live-deploy trigger). Uses
+  `json.dumps(..., ensure_ascii=False)` — without it, the `§`/`—` characters in `KnxObject`'s and
+  `Konnextor`'s `description` fields get corrupted into `\uXXXX` escapes on every bump; caught in
+  review before it shipped.
+- **`.github/actions/setup-pio/action.yml`** — composite action (setup-python + cache
+  `~/.platformio` keyed on `platformio.ini` + `pip install platformio`), shared by every job in
+  both workflows below so the setup steps are written once, not duplicated 4×.
+- **`.github/workflows/ci.yml`** — triggers on `pull_request` and `push` to **branches only**
+  (`branches: ['**']` — deliberately excludes tag refs; see the "why CI doesn't also run on the
+  tag" note below). Two jobs: `native-tests` (`pio test -e native`) and `firmware-build`
+  (`pio run -e seeed_xiao_esp32c6`).
+- **`.github/workflows/docs.yml`** — triggers only on `v*.*.*` tag pushes. Jobs in order:
+  1. `verify-version` — strips the `v` from the tag, compares it against `VERSION` and all 7
+     `library.json` files; fails immediately (no tests, no docs, no deploy) on any mismatch.
+  2. `test` / `build` (both need `verify-version`) — re-run the native suite and firmware build
+     against this exact tagged commit. Deliberately not trusted from `ci.yml`: a tag can point at
+     an old commit `ci.yml` never ran against, so the release pipeline verifies its own SHA.
+  3. `docs` (needs both) — downloads a **pinned Doxygen 1.17.0** binary (not `apt`'s likely-older
+     package), runs `doxygen Doxyfile`, **fails the job if `doxygen/warnings.txt` is non-empty**
+     (the zero-warnings invariant is now a real CI gate, not just a documented manual check),
+     then `actions/upload-pages-artifact` + `actions/deploy-pages`.
+
+### Why CI doesn't also run on the tag
+
+Originally `ci.yml` triggered on any `push` (no ref filter), so pushing a tag fired *both*
+`ci.yml` and `docs.yml`, running the native suite and firmware build twice for the same commit —
+observed directly on the `v0.1.1` release (two concurrent "CI"/"Publish docs" runs). Fixed by
+scoping `ci.yml`'s push trigger to `branches: ['**']`, which doesn't match tag refs. `docs.yml`
+still re-verifies independently (see above) — that's a real safety property for arbitrary/old
+tagged commits, not redundant with `ci.yml` in the general case, just redundant in the common
+one (tag pushed right after a normal commit).
+
+### A real gotcha hit on the first release, worth remembering
+
+The first `v0.1.1` tag push failed at the `docs` job with **"Tag 'v0.1.1' is not allowed to
+deploy to github-pages due to environment protection rules."** Enabling Pages (Settings → Pages
+→ Source → GitHub Actions) auto-creates a `github-pages` deployment environment whose branch/tag
+policy, by default, does not include tag refs — only branches. Fix: Settings → Environments →
+`github-pages` → **Deployment branches and tags** → add a rule with Ref type **Tag**, pattern
+`v*`. One-time, already done for this repo. Re-running the failed `docs` job afterward (no need
+to re-tag) completed successfully.
+
+### Release process
+
+```bash
+python3 scripts/bump_version.py 0.1.2        # picks the next version
+git diff                                      # sanity-check: only version fields changed
+git add VERSION lib/*/library.json
+git commit -m "Bump version to 0.1.2"
+git tag v0.1.2
+git push && git push --tags                   # the tag push is what fires docs.yml
+```
+
+Watch the "Publish docs" run in the Actions tab — `verify-version` → `test`/`build` → `docs`.
+
+## Step 4b — PLANNED, NOT STARTED: `Website_` runtime fetch + Doxygen theme rework
+
+**Why this still needs to happen:** Step 4a intentionally publishes today's themed output (Step
+3's doxygen-awesome CSS + baked-in Website_ navbar/footer) to GitHub Pages as-is. That carries
+Step 3's already-documented drift risk (the baked chrome copy can go stale against
+`Website_/components/navbar.php`/`footer.php`) onto a second, now-public URL — not a new problem,
+just more visible. `Website_/documentation.php` also still points at the Step 3
+manually-`cp -r`'d copy, not the new Pages URL.
 
 **Direction agreed with the user (conversation, not yet written as a formal design doc/plan):**
 
@@ -217,21 +286,14 @@ not just documented as accepted risk:
   detail — don't assume the whole `doxygen-theme/` directory goes away without checking what,
   if anything, is still needed structurally (e.g. does Doxygen still need *some* HTML_HEADER/
   FOOTER override just to strip the `<html>/<head>/<body>` wrapper down to a bare fragment?).
-- **CD trigger:** a GitHub Actions workflow in `KNX_Library`, triggered on a version-tag push
-  (`v*.*.*`) — this is the "once I increase the version number" hook. Needs the repo to be
-  **public** (private repos need GitHub Pro/Enterprise for Pages) — **not yet confirmed, check
-  this first** before committing to the design.
-- **Build + host:** the workflow runs `doxygen Doxyfile` and deploys the output to **GitHub
-  Pages** (`actions/deploy-pages`, or a `gh-pages` branch via `peaceiris/actions-gh-pages`).
-  `Website_`'s repo is never touched by this workflow — no cross-repo push, no PAT/deploy-key
-  needed.
 - **Runtime, in `Website_`:** `documentation.php` does a **server-side fetch** (PHP
   `file_get_contents`/curl, not client-side JS, not a build-time copy) against the GitHub Pages
-  URL for the current content fragment, and echoes it into `<main>` below the hero — navbar,
-  footer, and hero stay pure Website_ PHP, same as every other page on the site. Chosen over two
-  alternatives: CI pushing fragment files into `Website_` at build time (rejected: reintroduces
-  a cross-repo write, even if smaller than Step 3's), and client-side JS fetch+inject (rejected:
-  content invisible until JS runs, worse for SEO/no-JS).
+  URL (now live: `https://innotree-labs.github.io/KNX_Library/`) for the current content
+  fragment, and echoes it into `<main>` below the hero — navbar, footer, and hero stay pure
+  Website_ PHP, same as every other page on the site. Chosen over two alternatives: CI pushing
+  fragment files into `Website_` at build time (rejected: reintroduces a cross-repo write, even
+  if smaller than Step 3's), and client-side JS fetch+inject (rejected: content invisible until
+  JS runs, worse for SEO/no-JS).
 - **Content scope, decided:** README (Getting Started) + Examples + a **new "Hardware
   description" section** (not yet written — source content/authoring TBD) + **one combined
   "API Reference" page** covering all classes (explicitly NOT per-class routing/URLs — the user
@@ -239,8 +301,6 @@ not just documented as accepted risk:
 
 **Open questions, not yet decided — resolve these before writing a real implementation plan:**
 
-- Is `innotree-labs/KNX_Library` a public repo? (Gates whether default GitHub Pages works at
-  all, or whether it needs a different host.)
 - Caching strategy for the PHP fetch — hitting GitHub on every single page view is fragile/slow;
   needs *some* cache layer (APCu, a file cache with a TTL, or HTTP conditional GET), but which
   one wasn't discussed.
@@ -254,13 +314,13 @@ not just documented as accepted risk:
   directly in `Website_`? (If it's meant to come from the library repo like everything else in
   this pipeline, it should probably be a new `.md` file alongside `README.md`.)
 - What happens to the currently-published Step 3 output already sitting in `Website_/main`
-  (commit `f153b37`) once Step 4 lands — replaced outright, or does `documentation.php` need a
+  (commit `f153b37`) once Step 4b lands — replaced outright, or does `documentation.php` need a
   transition/fallback path?
 
-**Not started.** No code, no workflow file, no Doxyfile changes exist yet for this. Next session
-should brainstorm this properly (`superpowers:brainstorming`) given the number of open questions
-above, then write a design doc + implementation plan the same way Step 3 did, before touching
-any code.
+**Not started.** No code, no Doxyfile changes, no `Website_` PHP changes exist yet for this. Next
+session should brainstorm this properly (`superpowers:brainstorming`) given the number of open
+questions above, then write a design doc + implementation plan the same way Step 3 and 4a did,
+before touching any code.
 
 ## Open decisions (waiting on the user)
 
@@ -281,5 +341,10 @@ any code.
   `examples.md`, `Doxyfile`, `doxygen-theme/` (vendored doxygen-awesome + brand override + vendored
   Bootstrap/site assets + header/footer/chrome-override templates), `.gitignore` (+`doxygen/`),
   `lib/KnxValue/src/KnxValue.h` (struct fields given `///<` docs).
+- Committed (Step 4a, `3cf6149`..`e1531b2`): `docs/superpowers/specs/2026-07-22-ci-cd-pipeline-
+  design.md`, `docs/superpowers/plans/2026-07-22-ci-cd-pipeline.md`, `VERSION`,
+  `scripts/bump_version.py`, `.github/actions/setup-pio/action.yml`, `.github/workflows/ci.yml`,
+  `.github/workflows/docs.yml`, all 7 `lib/*/library.json` (version bumped to `0.1.1` as the
+  first release through the new pipeline).
 - Not committed in this repo — nothing; not committed in `Website_` (separate repo, by design):
   `Website_/documentation.php` (redirect) and `Website_/documentation/` (copied doc output).
