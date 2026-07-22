@@ -15,9 +15,10 @@ history). This phase is **documentation only** — no behaviour changes.
   Step 4's direction, not Step 3's.
 - **Step 4a — CI/CD pipeline: tests on every push, Doxygen → GitHub Pages on a version tag.**
   DONE. Live at **https://innotree-labs.github.io/KNX_Library/**. See below.
-- **Step 4b — `Website_` fetches published docs at request time; Doxygen becomes a pure content
-  generator (theme/chrome stripped).** PLANNED, NOT STARTED — deliberately deferred out of 4a.
-  See below.
+- **Step 4b — strip the Doxygen theme/chrome; Doxygen becomes a pure content generator.** DONE —
+  not yet live (needs a new version tag to publish). See below.
+- **Step 4c — `Website_` fetches the published content at request time and styles it.** PLANNED,
+  NOT STARTED — deferred to a future session working from the `Website_` repo. See below.
 
 ### Decisions already settled (do not re-litigate)
 
@@ -260,40 +261,50 @@ git push && git push --tags                   # the tag push is what fires docs.
 
 Watch the "Publish docs" run in the Actions tab — `verify-version` → `test`/`build` → `docs`.
 
-## Step 4b — PLANNED, NOT STARTED: `Website_` runtime fetch + Doxygen theme rework
+## Step 4b — DONE: strip the Doxygen theme/chrome
 
-**Why this still needs to happen:** Step 4a intentionally publishes today's themed output (Step
-3's doxygen-awesome CSS + baked-in Website_ navbar/footer) to GitHub Pages as-is. That carries
-Step 3's already-documented drift risk (the baked chrome copy can go stale against
-`Website_/components/navbar.php`/`footer.php`) onto a second, now-public URL — not a new problem,
-just more visible. `Website_/documentation.php` also still points at the Step 3
-manually-`cp -r`'d copy, not the new Pages URL.
+Design doc: `docs/superpowers/specs/2026-07-22-doxygen-theme-strip-design.md`. Scoped
+deliberately to *just* the theme/chrome removal in this repo — `Website_`'s side (fetch +
+restyling) is Step 4c, explicitly deferred to a separate session against the `Website_` repo.
+
+**What changed:** `Doxyfile` no longer sets `HTML_HEADER`, `HTML_FOOTER`,
+`HTML_EXTRA_STYLESHEET`, or `HTML_EXTRA_FILES` — Doxygen falls back to its own built-in
+default header/footer/stylesheet. The entire `doxygen-theme/` directory (both doxygen-awesome
+CSS files, `custom-innotree.css`, vendored Bootstrap CSS/JS + icon fonts, `site-style.css`,
+`site-chrome-override.css`, `header.html`, `footer.html`, `LICENSE` — 13 files) is deleted;
+recoverable from git history if Step 4c ever wants to see how Step 3 did navbar/footer
+injection. `GENERATE_TREEVIEW`, `DISABLE_INDEX`, `FULL_SIDEBAR`, `HTML_COLORSTYLE` are
+untouched — those are Doxygen's own structural settings (tree-view sidebar, search,
+collapsible sections), not part of what got stripped, and still work in the plain output.
+
+Verified: `doxygen Doxyfile` regenerates with `doxygen/warnings.txt` still empty; the generated
+`index.html` references only Doxygen's stock assets (`doxygen.css`, `navtree.css`, `tabs.css`,
+`dynsections.js`, etc.) — no Bootstrap, no `custom-innotree.css`, no injected navbar/footer.
+`ci.yml`/`docs.yml` needed no changes — neither references theme internals.
+
+**This does not appear on the live site until the next version tag** — `docs.yml` only
+regenerates and republishes on a `v*.*.*` push; the `v0.1.1` output already live at
+https://innotree-labs.github.io/KNX_Library/ stays themed (Step 3's look) until a new tag is cut.
+
+## Step 4c — PLANNED, NOT STARTED, deferred to a `Website_`-repo session: runtime fetch + styling
+
+**Why this still needs to happen:** `Website_/documentation.php` still points at Step 3's
+manually-`cp -r`'d copy, not the new Pages URL, and nothing yet styles the now-plain Doxygen
+output. The user's explicit call this session: this half of the work happens later, in a
+session working from the `Website_` repo, not this one.
 
 **Direction agreed with the user (conversation, not yet written as a formal design doc/plan):**
 
-- **Doxygen becomes a pure content generator, not a themed site generator.** No navbar, no
-  footer, and — this is the bigger shift — **no doxygen-awesome theme CSS either**. The user's
-  words: "just html, the formatting should be done in Website_." `Website_`'s own stylesheet
-  should style Doxygen's raw output tags directly, not sit alongside a second competing theme.
-  This means most of what Step 3 built becomes dead weight for this direction: `doxygen-theme/
-  header.html`'s navbar injection, `footer.html`, `site-chrome-override.css` (the whole reason
-  it exists — a color collision between doxygen-awesome and an injected Bootstrap navbar — stops
-  applying once there's no injected navbar in the same document), and probably the
-  `--chrome-offset` sidebar-position fix and doxygen-awesome-sidebar-only.css's fixed/absolute
-  positioning model generally (that whole model assumes a full-viewport standalone app-shell
-  page, which no longer applies once Doxygen's output is a fragment embedded inside a normal
-  scrolling page). Confirm exactly what gets deleted vs. kept when this is actually planned in
-  detail — don't assume the whole `doxygen-theme/` directory goes away without checking what,
-  if anything, is still needed structurally (e.g. does Doxygen still need *some* HTML_HEADER/
-  FOOTER override just to strip the `<html>/<head>/<body>` wrapper down to a bare fragment?).
 - **Runtime, in `Website_`:** `documentation.php` does a **server-side fetch** (PHP
   `file_get_contents`/curl, not client-side JS, not a build-time copy) against the GitHub Pages
-  URL (now live: `https://innotree-labs.github.io/KNX_Library/`) for the current content
-  fragment, and echoes it into `<main>` below the hero — navbar, footer, and hero stay pure
-  Website_ PHP, same as every other page on the site. Chosen over two alternatives: CI pushing
-  fragment files into `Website_` at build time (rejected: reintroduces a cross-repo write, even
-  if smaller than Step 3's), and client-side JS fetch+inject (rejected: content invisible until
-  JS runs, worse for SEO/no-JS).
+  URL (`https://innotree-labs.github.io/KNX_Library/`) for the current content fragment, and
+  echoes it into `<main>` below the hero — navbar, footer, and hero stay pure Website_ PHP, same
+  as every other page on the site. Chosen over two alternatives: CI pushing fragment files into
+  `Website_` at build time (rejected: reintroduces a cross-repo write, even if smaller than Step
+  3's), and client-side JS fetch+inject (rejected: content invisible until JS runs, worse for
+  SEO/no-JS).
+- **`Website_` authors its own stylesheet** targeting Doxygen's default class names (`memitem`,
+  `memdoc`, `memname`, etc.) — the plain output from Step 4b is what it styles against.
 - **Content scope, decided:** README (Getting Started) + Examples + a **new "Hardware
   description" section** (not yet written — source content/authoring TBD) + **one combined
   "API Reference" page** covering all classes (explicitly NOT per-class routing/URLs — the user
@@ -304,23 +315,18 @@ manually-`cp -r`'d copy, not the new Pages URL.
 - Caching strategy for the PHP fetch — hitting GitHub on every single page view is fragile/slow;
   needs *some* cache layer (APCu, a file cache with a TTL, or HTTP conditional GET), but which
   one wasn't discussed.
-- How much of doxygen-awesome (if any) survives — fully dropped in favor of raw output + a fresh
-  `Website_`-authored stylesheet targeting Doxygen's known class names (`memitem`, `memdoc`,
-  `memname`, etc.), or kept minimally for structural things (collapsible member lists, search)
-  with only the *visual* theme stripped? This determines the Doxyfile config and how much of
-  `doxygen-theme/` gets deleted vs. adapted.
 - Where does "Hardware description" content actually come from — a new markdown file fed into
   Doxygen's `INPUT`/mainpage mechanism (like `README.md`/`examples.md` today), or hand-authored
   directly in `Website_`? (If it's meant to come from the library repo like everything else in
   this pipeline, it should probably be a new `.md` file alongside `README.md`.)
 - What happens to the currently-published Step 3 output already sitting in `Website_/main`
-  (commit `f153b37`) once Step 4b lands — replaced outright, or does `documentation.php` need a
+  (commit `f153b37`) once Step 4c lands — replaced outright, or does `documentation.php` need a
   transition/fallback path?
 
-**Not started.** No code, no Doxyfile changes, no `Website_` PHP changes exist yet for this. Next
-session should brainstorm this properly (`superpowers:brainstorming`) given the number of open
-questions above, then write a design doc + implementation plan the same way Step 3 and 4a did,
-before touching any code.
+**Not started.** No `Website_` PHP/CSS changes exist yet for this. The session that picks this up
+should brainstorm it properly (`superpowers:brainstorming`) against the `Website_` repo, given
+the open questions above, then write a design doc + implementation plan the same way Step 3, 4a,
+and 4b did, before touching any code.
 
 ## Open decisions (waiting on the user)
 
@@ -346,5 +352,8 @@ before touching any code.
   `scripts/bump_version.py`, `.github/actions/setup-pio/action.yml`, `.github/workflows/ci.yml`,
   `.github/workflows/docs.yml`, all 7 `lib/*/library.json` (version bumped to `0.1.1` as the
   first release through the new pipeline).
+- Committed (Step 4b, `2d6fe03`..`2887b8c`):
+  `docs/superpowers/specs/2026-07-22-doxygen-theme-strip-design.md`, `Doxyfile` (theme settings
+  removed), `doxygen-theme/` deleted entirely (13 files).
 - Not committed in this repo — nothing; not committed in `Website_` (separate repo, by design):
   `Website_/documentation.php` (redirect) and `Website_/documentation/` (copied doc output).
