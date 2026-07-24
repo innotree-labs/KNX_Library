@@ -18,7 +18,7 @@
 
 //---- Libraries ----
 #include <Arduino.h>
-#include <Konnextor.h>     // the whole library: driver + coordinator + values + intent objects
+#include <InnotreeKNX.h>     // the whole library: driver + coordinator + values + intent objects
 
 //---- Configuration ----
 #define BAUDRATE_SERIAL     115200
@@ -32,7 +32,7 @@
 #define KNX_VERBOSE         true
 
 //---- KNX node: one object, address typed once; the bus driver is owned internally ----
-Konnextor knx(PHYS_ADDR);
+InnotreeKNX knx(PHYS_ADDR);
 
 //---- The light under test: (node, switching GA, status GA) ----
 // Sends on/off to 0/1/1, listens for switching status on 1/1/1.

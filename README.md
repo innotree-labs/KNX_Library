@@ -5,9 +5,9 @@ expertise: you describe devices by **what they are** — a light, a blind, a
 temperature — and the library handles the datapoints, framing and bus timing.
 
 ```cpp
-#include <Konnextor.h>
+#include <InnotreeKNX.h>
 
-Konnextor knx("1.1.5");                 // this device's KNX address
+InnotreeKNX knx("1.1.5");                 // this device's KNX address
 KnxLight  lamp(knx, "0/1/1", "0/3/0");  // command address, status address
 
 void setup() {
@@ -48,16 +48,16 @@ lib_deps =
 ```
 
 **Arduino IDE** — download the library and add it through
-*Sketch → Include Library → Add .ZIP Library…*, then `#include <Konnextor.h>`.
+*Sketch → Include Library → Add .ZIP Library…*, then `#include <InnotreeKNX.h>`.
 
 ## The bus node
 
-Everything starts with one `Konnextor`, created from this device's physical
+Everything starts with one `InnotreeKNX`, created from this device's physical
 address. Call `begin()` once in `setup()`, and `loop()` on every pass of your
 sketch's `loop()` so the library can receive telegrams:
 
 ```cpp
-Konnextor knx("1.1.5");
+InnotreeKNX knx("1.1.5");
 
 void setup() {
     knx.begin();
@@ -78,7 +78,7 @@ it uses. It sends commands, remembers the last value, and calls a function you
 provide when the value changes on the bus.
 
 ```cpp
-Konnextor knx("1.1.5");
+InnotreeKNX knx("1.1.5");
 KnxLight  lamp(knx, "0/1/1", "0/3/0");   // sends on 0/1/1, reads status on 0/3/0
 
 void onLampChanged(bool on);             // declared here, defined below

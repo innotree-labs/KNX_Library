@@ -9,9 +9,9 @@ with named methods, and register a callback for status changes. Here a light is
 switched and its status is tracked.
 
 ```cpp
-#include <Konnextor.h>
+#include <InnotreeKNX.h>
 
-Konnextor knx("1.1.5");                 // this device's KNX address
+InnotreeKNX knx("1.1.5");                 // this device's KNX address
 KnxLight  lamp(knx, "0/1/1", "0/3/0");  // command address, status address
 
 void onLampChanged(bool on);            // defined below
@@ -41,9 +41,9 @@ To send a one-off value to any group address without keeping an object, use the 
 directly with a typed value. There is no status callback on this path — it only sends.
 
 ```cpp
-#include <Konnextor.h>
+#include <InnotreeKNX.h>
 
-Konnextor knx("1.1.5");
+InnotreeKNX knx("1.1.5");
 
 void setup() {
     knx.begin();
@@ -66,9 +66,9 @@ group address and the datapoint type once, then send with `write()` and receive 
 `onUpdate()`. Here a 16-bit counter (DPT 7) is published and read.
 
 ```cpp
-#include <Konnextor.h>
+#include <InnotreeKNX.h>
 
-Konnextor knx("1.1.5");
+InnotreeKNX knx("1.1.5");
 KnxObject counter(knx, "0/5/0", KnxDpt::DPT7);   // 16-bit unsigned value
 
 void onCounter(const KnxValue& value);

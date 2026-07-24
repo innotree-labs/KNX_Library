@@ -34,7 +34,7 @@ history). This phase is **documentation only** — no behaviour changes.
 
 ## Step 1 — DONE (committed `de253bc`)
 
-All 10 in-scope targets rewritten: `Konnextor.h`, `KnxObject.h`, `KnxLighting.h`, `KnxCovers.h`,
+All 10 in-scope targets rewritten: `InnotreeKNX.h`, `KnxObject.h`, `KnxLighting.h`, `KnxCovers.h`,
 `KnxClimate.h`, `KnxDateTime.h`, `KnxScalars.h`, `KnxValue.h`, `KnxCoordinator.h`, plus the three
 user-facing enums in `KnxEnums.h` (`KnxDpt`, `DimmIncrement`, `KnxTpci`).
 
@@ -208,7 +208,7 @@ started.
   `library.json` files, prints the follow-up `git` commands but never runs them itself (commit/
   tag/push stay an explicit human step — pushing the tag is the live-deploy trigger). Uses
   `json.dumps(..., ensure_ascii=False)` — without it, the `§`/`—` characters in `KnxObject`'s and
-  `Konnextor`'s `description` fields get corrupted into `\uXXXX` escapes on every bump; caught in
+  `InnotreeKNX`'s `description` fields get corrupted into `\uXXXX` escapes on every bump; caught in
   review before it shipped.
 - **`.github/actions/setup-pio/action.yml`** — composite action (setup-python + cache
   `~/.platformio` keyed on `platformio.ini` + `pip install platformio`), shared by every job in
@@ -330,7 +330,7 @@ and 4b did, before touching any code.
 
 ## Open decisions (waiting on the user)
 
-- **`PROJECT_NAME` is still `"Konnextor"`**, shown in the doxygen-awesome title chip. Deliberately
+- **`PROJECT_NAME` is still `"InnotreeKNX"`**, shown in the doxygen-awesome title chip. Deliberately
   kept — the integration plan states explicitly that project identity does not get renamed.
 - **Code styling split:** block code is dark (matching the site's hero windows), inline `code` in
   prose is left light for readability. Confirm or make inline dark too.

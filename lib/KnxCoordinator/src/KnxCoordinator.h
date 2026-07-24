@@ -7,7 +7,7 @@
  *          them to the device objects attached to it, and exposes begin(), loop() and the debug
  *          switch a sketch calls on its `knx` object.
  *
- *          Most sketches never name this class directly: they create a `Konnextor` (Konnextor.h),
+ *          Most sketches never name this class directly: they create a `InnotreeKNX` (InnotreeKNX.h),
  *          which is a KnxCoordinator that also owns its bus driver, so the driver is set up for
  *          you. Use KnxCoordinator directly only for the advanced case of supplying your own
  *          driver (IKnxDriver) — for example a custom transceiver or a mock in a host test.
@@ -51,7 +51,7 @@ class KnxCoordinator {
 		//---- Constructor ----
 		/**
 		 * @brief Advanced: creates a bus node driven by a bus driver you provide. Most sketches
-		 *        use Konnextor instead, which supplies the driver for you.
+		 *        use InnotreeKNX instead, which supplies the driver for you.
 		 * @param driver          The bus driver to use; not owned, and must outlive this node.
 		 * @param physicalAddress This device's physical address.
 		*/

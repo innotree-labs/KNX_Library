@@ -27,8 +27,8 @@ Strict layered design — dependencies only flow downward, acyclic (PLAN §12):
 
 ```
 src/main.cpp        ← showcase sketch: wires the stack + drives intent objects
-lib/Konnextor/      ← THE public surface, and nothing else: Konnextor.h — the single user
-                      include, sole root of the DAG. Defines the Konnextor node class (owns a
+lib/InnotreeKNX/      ← THE public surface, and nothing else: InnotreeKNX.h — the single user
+                      include, sole root of the DAG. Defines the InnotreeKNX node class (owns a
                       KnxDriver, built from the physical address). Header-only, Arduino-only.
 lib/KnxObject/      ← KnxObject : IKnxReceiver + intent classes (KnxLight, KnxDimmLight,
                       KnxRGB, KnxBlind, KnxTemperature, …) grouped by domain header. Header-only.
@@ -46,21 +46,21 @@ examples/KNX_Device/← thesis button state machines (SingleButton/TwoButtonDimm
                       NOT in the build, NOT part of the library surface (PLAN §12)
 ```
 
-Dependency flow: `Konnextor → {KnxDriver, KnxObject, KnxCoordinator, KnxValue, KnxCommon}`,
+Dependency flow: `InnotreeKNX → {KnxDriver, KnxObject, KnxCoordinator, KnxValue, KnxCommon}`,
 `KnxObject → KnxCoordinator → {KnxTelegram, KnxValue, KnxCommon}`,
 `KnxDriver → {KnxTelegram, KnxCommon}`, `KnxTelegram → KnxValue → KnxCommon`.
 Interfaces (`IKnxDriver`, `IKnxReceiver`) live in `KnxCommon` below their consumers, so the
-coordinator never includes the concrete driver or object headers — no cycle. `Konnextor` is the
+coordinator never includes the concrete driver or object headers — no cycle. `InnotreeKNX` is the
 only library above the driver, and nothing includes it — which is exactly why it can bundle the
 whole stack, and why native tests (which include `KnxCoordinator.h` and the object headers
 directly) never drag the Arduino driver into a host build.
 
 No global singletons. Dependencies are injected by constructor pointer/reference.
 
-**User include & construction:** a sketch needs only `#include <Konnextor.h>` and
-`Konnextor knx("1.1.5");`. `Konnextor.h` (its own library, sole root of the DAG) pulls in the
+**User include & construction:** a sketch needs only `#include <InnotreeKNX.h>` and
+`InnotreeKNX knx("1.1.5");`. `InnotreeKNX.h` (its own library, sole root of the DAG) pulls in the
 driver, the coordinator core, the value currency, and every intent class, then defines the
-user-facing **`Konnextor` node class** — a thin
+user-facing **`InnotreeKNX` node class** — a thin
 Arduino subclass of `KnxCoordinator` that *owns* a `KnxDriver` and is built from the physical
 address, so the user never instantiates or injects a driver (address typed once). The
 dependency-injection **core is `KnxCoordinator`** (`KnxCoordinator.h`): Arduino-free, host-testable

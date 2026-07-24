@@ -1,9 +1,9 @@
-# Doxyfile for the Konnextor KNX library — user-facing API reference.
+# Doxyfile for the InnotreeKNX KNX library — user-facing API reference.
 # Scoped to the public headers only; the lower layers (framing, driver, codec) are omitted
 # on purpose. Regenerate with:  doxygen Doxyfile
 
 #---- Project ----
-PROJECT_NAME           = "Konnextor"
+PROJECT_NAME           = "InnotreeKNX"
 PROJECT_BRIEF          = "An Arduino KNX library — simple, no ETS required"
 OUTPUT_DIRECTORY       = doxygen
 CREATE_SUBDIRS         = NO
@@ -12,7 +12,7 @@ CREATE_SUBDIRS         = NO
 INPUT                  = README.md \
                          examples.md \
                          Hardware.md \
-                         lib/Konnextor/src/Konnextor.h \
+                         lib/InnotreeKNX/src/InnotreeKNX.h \
                          lib/KnxObject/src/KnxObject.h \
                          lib/KnxObject/src/KnxLighting.h \
                          lib/KnxObject/src/KnxCovers.h \
