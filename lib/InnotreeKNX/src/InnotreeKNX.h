@@ -1,14 +1,14 @@
 #pragma once
 /**
- * @name Konnextor.h
+ * @name InnotreeKNX.h
  * @date 18.07.2026
  * @authors Florian Wiesner
  * @details The only header a sketch includes. It brings in the whole KNX library — the bus node,
  *          the value types (KnxValue and the Dpt*() factories), and every device object (KnxLight,
  *          KnxBlind, KnxTemperature, …) — so a sketch needs just:
  *
- *              #include <Konnextor.h>
- *              Konnextor knx("1.1.5");                 // this device's KNX address
+ *              #include <InnotreeKNX.h>
+ *              InnotreeKNX knx("1.1.5");                 // this device's KNX address
  *              KnxLight kitchen(knx, "0/1/1", "0/3/0");
 */
 
@@ -32,7 +32,7 @@
  *        it drives the transceiver for you and every device object (KnxLight, KnxBlind, …) is
  *        attached to it. Call begin() once in setup() and loop() every iteration.
 */
-class Konnextor : public KnxCoordinator {
+class InnotreeKNX : public KnxCoordinator {
 	private:
 		KnxDriver driverImpl;
 
@@ -42,6 +42,6 @@ class Konnextor : public KnxCoordinator {
 		 * @param physicalAddress This device's KNX physical address as "area.line.device",
 		 *                        e.g. "1.1.5".
 		*/
-		explicit Konnextor(const String& physicalAddress)
+		explicit InnotreeKNX(const String& physicalAddress)
 			: KnxCoordinator(&driverImpl, physicalAddress), driverImpl(physicalAddress) {}
 };
