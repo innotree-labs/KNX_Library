@@ -1,6 +1,6 @@
 {
   "name": "KnxCommon",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Shared KNX vocabulary: enums, addresses, telegram/event types, and the IKnxDriver/IKnxReceiver interfaces. Core headers are Arduino-free.",
   "frameworks": "*",
   "platforms": "*"

@@ -1,6 +1,6 @@
 {
   "name": "KnxObject",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Stateful KNX objects (PLAN §5-7). KnxObject : IKnxReceiver holds a GA/DPT/cached value/callback, self-registers in the coordinator's intrusive registry, and decodes incoming telegrams with its own DPT. Intent subclasses (KnxLight, KnxDimmLight, KnxBlind, KnxTemperature, ...) hide the DPT. Header-only so the LDF pulls no Arduino-bound translation unit into native tests; the public InnotreeKNX.h facade lives in its own library above this one.",
   "frameworks": "*",
   "platforms": "*",
